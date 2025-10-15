@@ -1,3 +1,28 @@
+# Dependencies
 node_modules/
-*.db
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Environment variables
 .env
+.env.local
+.env.*.local
+
+# Production database file
+*.db
+
+# OS generated files
+.DS_Store
+._*
+Thumbs.db
