@@ -1,0 +1,107 @@
+<%- include('partials/header') %>
+
+<div class="container mt-4">
+  <div class="row">
+    <!-- Form for adding/editing a space -->
+    <div class="col-md-4">
+      <div class="card">
+        <div class="card-header">
+          <h3><%= space ? 'Edit Space' : 'Add New Space' %></h3>
+        </div>
+        <div class="card-body">
+          <form action="<%= space ? '/space/edit/' + space.id : '/space/add' %>" method="POST">
+            <div class="mb-3">
+              <label for="type" class="form-label">Type</label>
+              <select class="form-select" id="type" name="type" required>
+                <option value="Stall" <%= (space && space.type === 'Stall') ? 'selected' : '' %>>Stall</option>
+                <option value="Pavilion" <%= (space && space.type === 'Pavilion') ? 'selected' : '' %>>Pavilion</option>
+                <option value="Booth" <%= (space && space.type === 'Booth') ? 'selected' : '' %>>Booth</option>
+                <option value="SpecialZone" <%= (space && space.type === 'SpecialZone') ? 'selected' : '' %>>Special Zone</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label for="name" class="form-label">Name / Number</label>
+              <input type="text" class="form-control" id="name" name="name" value="<%= space ? space.name : '' %>" required>
+            </div>
+            <div class="mb-3">
+              <label for="size" class="form-label">Size (e.g., 10x10)</label>
+              <input type="text" class="form-control" id="size" name="size" value="<%= space ? space.size : '' %>">
+            </div>
+            <div class="mb-3">
+              <label for="rent_amount" class="form-label">Rent Amount</label>
+              <input type="number" class="form-control" id="rent_amount" name="rent_amount" value="<%= space ? space.rent_amount : '' %>">
+            </div>
+            <div class="mb-3">
+              <label for="facilities" class="form-label">Facilities</label>
+              <input type="text" class="form-control" id="facilities" name="facilities" value="<%= space ? space.facilities : '' %>">
+            </div>
+            <div class="mb-3">
+              <label for="location" class="form-label">Location</label>
+              <input type="text" class="form-control" id="location" name="location" value="<%= space ? space.location : '' %>">
+            </div>
+            <button type="submit" class="btn btn-primary"><%= space ? 'Update' : 'Add' %> Space</button>
+            <% if (space) { %>
+              <a href="/space/add" class="btn btn-secondary">Cancel</a>
+            <% } %>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Table of existing spaces -->
+    <div class="col-md-8">
+      <div class="card">
+        <div class="card-header">
+          <h3>Existing Spaces</h3>
+        </div>
+        <div class="card-body">
+          <table class="table table-striped table-hover">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Name</th>
+                <th>Size</th>
+                <th>Rent</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (spaces && spaces.length > 0) { %>
+                <% spaces.forEach(s => { %>
+                  <tr>
+                    <td><%= s.type %></td>
+                    <td><%= s.name %></td>
+                    <td><%= s.size %></td>
+                    <td><%= s.rent_amount %></td>
+                    <td>
+                      <span class="badge <%= s.status === 'Booked' ? 'bg-danger' : 'bg-success' %>">
+                        <%= s.status %>
+                      </span>
+                    </td>
+                    <td>
+                      <div class="btn-group">
+                        <a href="/space/edit/<%= s.id %>" class="btn btn-sm btn-warning">
+                          <i class="bi bi-pencil-fill"></i> Edit
+                        </a>
+                        <form action="/space/delete/<%= s.id %>" method="POST" onsubmit="return confirm('Are you sure you want to delete this space?');" class="d-inline">
+                          <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-trash-fill"></i> Delete</button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                <% }); %>
+              <% } else { %>
+                <tr>
+                  <td colspan="6" class="text-center">No spaces found.</td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

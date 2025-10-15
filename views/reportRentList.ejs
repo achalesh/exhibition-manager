@@ -1,0 +1,106 @@
+<%- include('partials/header') %>
+
+<div class="card">
+    <div class="card-header">
+        <div class="row">
+            <div class="col-md-6">
+                <h3 class="mb-0">Rent Report</h3>
+            </div>
+            <div class="col-md-4">
+                <input type="text" id="searchInput" class="form-control" placeholder="Search bookings...">
+            </div>
+            <div class="col-md-2 text-end">
+                <button onclick="window.print()" class="btn btn-primary d-print-none me-1" title="Print Report"><i class="fas fa-print"></i> Print</button>
+                <button id="download-excel" class="btn btn-success d-print-none" title="Download Excel"><i class="fas fa-file-excel"></i> Excel</button>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table id="reportTable" class="table table-bordered table-striped table-hover">
+                <thead class="thead-dark">
+                    <tr>
+                        <th data-sort-dir="asc"># <i class="fas fa-sort"></i></th>
+                        <th data-sort-dir="asc">Exhibitor Name <i class="fas fa-sort"></i></th>
+                        <th data-sort-dir="asc">Facia Name <i class="fas fa-sort"></i></th>
+                        <th data-sort-dir="asc">Space <i class="fas fa-sort"></i></th>
+                        <th class="text-right" data-sort-dir="asc">Rent Amount <i class="fas fa-sort"></i></th>
+                        <th class="text-right" data-sort-dir="asc">Discount <i class="fas fa-sort"></i></th>
+                        <th class="text-right" data-sort-dir="asc">Rent Received <i class="fas fa-sort"></i></th>
+                        <th class="text-right" data-sort-dir="asc">Rent Balance <i class="fas fa-sort"></i></th>
+                    </tr>
+                </thead>
+                <tbody id="reportTableBody">
+                    <% if (bookings && bookings.length > 0) { %>
+                        <% bookings.forEach((b, index) => { %>
+                            <tr>
+                                <td><%= index + 1 %></td>
+                                <td><%= b.exhibitor_name %></td>
+                                <td><%= b.facia_name %></td>
+                                <td><%= b.space_name %></td>
+                                <td class="text-right"><%= (b.rent_amount || 0).toFixed(2) %></td>
+                                <td class="text-right"><%= (b.discount || 0).toFixed(2) %></td>
+                                <td class="text-right"><%= (b.rent_received || 0).toFixed(2) %></td>
+                                <td class="text-right"><%= (b.rent_balance || 0).toFixed(2) %></td>
+                            </tr>
+                        <% }); %>
+                    <% } else { %>
+                        <tr>
+                            <td colspan="8" class="text-center">No bookings found.</td>
+                        </tr>
+                    <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('download-excel').addEventListener('click', function() {
+        window.location.href = '/report/downloadExcelRent';
+    });
+
+    const searchInput = document.getElementById('searchInput');
+    const tableBody = document.getElementById('reportTableBody');
+    const tableRows = Array.from(tableBody.getElementsByTagName('tr'));
+
+    searchInput.addEventListener('keyup', (e) => {
+        const searchTerm = e.target.value.toLowerCase();
+        tableRows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            row.style.display = text.includes(searchTerm) ? '' : 'none';
+        });
+    });
+
+    document.querySelectorAll('#reportTable thead th').forEach((header, colIndex) => {
+        header.addEventListener('click', () => {
+            const sortDir = header.dataset.sortDir;
+            const newSortDir = sortDir === 'asc' ? 'desc' : 'asc';
+            header.dataset.sortDir = newSortDir;
+
+            document.querySelectorAll('#reportTable thead th i').forEach(i => i.className = 'fas fa-sort');
+            header.querySelector('i').className = newSortDir === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down';
+
+            const rows = Array.from(tableBody.querySelectorAll('tr'));
+
+            rows.sort((a, b) => {
+                let valA = a.cells[colIndex].textContent.trim();
+                let valB = b.cells[colIndex].textContent.trim();
+
+                if (!isNaN(valA.replace(/[^0-9.-]/g, '')) && !isNaN(valB.replace(/[^0-9.-]/g, ''))) {
+                    valA = parseFloat(valA.replace(/[^0-9.-]/g, ''));
+                    valB = parseFloat(valB.replace(/[^0-9.-]/g, ''));
+                } else {
+                    valA = valA.toLowerCase();
+                    valB = valB.toLowerCase();
+                }
+
+                return (valA < valB ? -1 : (valA > valB ? 1 : 0)) * (newSortDir === 'asc' ? 1 : -1);
+            });
+
+            rows.forEach(row => tableBody.appendChild(row));
+        });
+    });
+</script>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,235 @@
+<%- include('partials/header') %>
+
+<div class="row">
+  <!-- Space Selection & Booking Form -->
+  <div class="col-md-6">
+    <h2 class="mb-3">Select a Space</h2>
+
+    <!-- Space Selection -->
+    <div class="mb-3">
+      <label class="form-label">Space Type</label>
+      <select class="form-select" id="space_type">
+        <option value="" disabled selected>Select Type</option>
+        <option value="Pavilion">🏢 Pavilion</option>
+        <option value="Stall">🧺 Stall</option>
+        <option value="Booth">🎪 Booth</option>
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Select Space</label>
+      <select class="form-select" id="space_id">
+        <option value="" disabled selected>-- Select a type first --</option>
+      </select>
+    </div>
+
+    <!-- Booking Form (Initially Hidden) -->
+    <form method="POST" action="/booking/add" id="booking_form" style="display: none;">
+      <hr>
+      <h4 class="mb-3">New Booking</h4>
+      <input type="hidden" id="form_space_id" name="space_id">
+
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Name of the Exhibitor</label>
+          <input type="text" class="form-control" name="exhibitor_name" id="exhibitor_name" required spellcheck="true" list="exhibitor-suggestions">
+          <datalist id="exhibitor-suggestions">
+            <% suggestions.exhibitors.forEach(item => { %>
+              <option value="<%= item %>">
+            <% }) %>
+          </datalist>
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Name of the Facia</label>
+          <input type="text" class="form-control" name="facia_name" spellcheck="true" list="facia-suggestions">
+          <datalist id="facia-suggestions">
+            <% suggestions.faciaNames.forEach(item => { %>
+              <option value="<%= item %>">
+            <% }) %>
+          </datalist>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Product Category</label>
+        <input type="text" class="form-control" name="product_category" spellcheck="true" list="product-suggestions">
+        <datalist id="product-suggestions">
+          <% suggestions.productCategories.forEach(item => { %>
+            <option value="<%= item %>">
+          <% }) %>
+        </datalist>
+      </div>
+
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Contact Person</label>
+          <input type="text" class="form-control" name="contact_person" required>
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Contact Number</label>
+          <input type="tel" class="form-control" name="contact_number" required>
+        </div>
+      </div>
+      
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Secondary Number</label>
+          <input type="tel" class="form-control" name="secondary_number">
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Aadhaar/PAN No.</label>
+          <input type="text" class="form-control" name="id_proof">
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Full Address</label>
+        <textarea class="form-control" name="full_address" rows="3" spellcheck="true"></textarea>
+      </div>
+
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" value="1" id="form_submitted" name="form_submitted">
+        <label class="form-check-label" for="form_submitted">
+          Signed Application Form Submitted
+        </label>
+      </div>
+
+      <hr>
+      <h5 class="mb-3">Payment Details</h5>
+      
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Rent Amount (₹)</label>
+          <input type="number" class="form-control" id="rent_amount" name="rent_amount" readonly required>
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Discount (₹)</label>
+          <input type="number" class="form-control" id="discount" name="discount" value="0" min="0">
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Advance (₹)</label>
+          <input type="number" class="form-control" id="advance" name="advance_amount" value="0" min="0">
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Due Amount (₹)</label>
+          <input type="number" class="form-control" id="due" name="due_amount" readonly>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-success w-100">✅ Book This Space</button>
+    </form>
+  </div>
+
+  <!-- Space & Booking Details -->
+  <div class="col-md-6">
+    <h2 class="mb-3">Details</h2>
+    <div id="details_card" class="card">
+      <div class="card-body">
+        <h5 class="card-title">Select a space to see its details</h5>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const spaces = <%- JSON.stringify(spaces) %>;
+  const spaceTypeSelect = document.getElementById('space_type');
+  const spaceSelect = document.getElementById('space_id');
+  const bookingForm = document.getElementById('booking_form');
+  const detailsCardBody = document.getElementById('details_card').querySelector('.card-body');
+
+  function populateSpaces(selectedType) {
+    spaceSelect.innerHTML = '<option value="" disabled selected>-- Select a space --</option>'; // Reset
+    spaces.forEach(s => {
+      if (s.type === selectedType) {
+        const option = document.createElement('option');
+        option.value = s.id;
+        option.textContent = s.name;
+        if (s.status !== 'Available') {
+          option.disabled = true;
+          option.textContent += ' (Booked)';
+        }
+        spaceSelect.appendChild(option);
+      }
+    });
+  }
+
+  spaceTypeSelect.addEventListener('change', () => {
+    const selectedType = spaceTypeSelect.value;
+    populateSpaces(selectedType);
+    bookingForm.style.display = 'none';
+    detailsCardBody.innerHTML = '<h5 class="card-title">Select a space to see its details</h5>';
+  });
+
+  spaceSelect.addEventListener('change', async () => {
+    const selectedId = parseInt(spaceSelect.value);
+    await updateDetailsForSpace(selectedId);
+  });
+
+  async function updateDetailsForSpace(selectedId) {
+    if (!selectedId) {
+      return;
+    }
+
+    const selectedSpace = spaces.find(s => s.id === selectedId);
+    if (!selectedSpace) return;
+
+    let detailsHtml = `<h5 class="card-title">${selectedSpace.name}</h5><p><strong>Type:</strong> ${selectedSpace.type}</p><p><strong>Rent:</strong> ₹${selectedSpace.rent_amount}</p>`;
+
+    if (selectedSpace.status === 'Available') {
+      detailsHtml += `<p><strong>Status:</strong> <span class="badge bg-success">Available</span></p>`;
+      detailsCardBody.innerHTML = detailsHtml;
+      document.getElementById('form_space_id').value = selectedSpace.id;
+      document.getElementById('rent_amount').value = selectedSpace.rent_amount;
+      calculateTotal();
+      bookingForm.style.display = 'block';
+      document.getElementById('exhibitor_name').focus(); // Autofocus on the first field
+    } else {
+      detailsHtml += `<p><strong>Status:</strong> <span class="badge bg-danger">Booked</span></p>`;
+      bookingForm.style.display = 'none';
+      try {
+        const response = await fetch(`/booking/details/${selectedSpace.id}`);
+        if (response.ok) {
+          const bookingDetails = await response.json();
+          if (bookingDetails) {
+            detailsHtml += `<hr><h6>Booking Information</h6>
+              <p><strong>Exhibitor:</strong> ${bookingDetails.exhibitor_name}</p>
+              <p><strong>Contact Person:</strong> ${bookingDetails.contact_person}</p>
+              <p><strong>Contact Number:</strong> ${bookingDetails.contact_number}</p>
+              <p><strong>Booking Date:</strong> ${new Date(bookingDetails.booking_date).toLocaleDateString()}</p>`;
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching booking details:', error);
+      }
+      detailsCardBody.innerHTML = detailsHtml;
+    }
+  }
+
+  function calculateTotal() {
+    const rent = parseFloat(document.getElementById('rent_amount').value) || 0;
+    const discount = parseFloat(document.getElementById('discount').value) || 0;
+    const advance = parseFloat(document.getElementById('advance').value) || 0;
+    const totalAfterDiscount = Math.max(0, rent - discount);
+    document.getElementById('due').value = Math.max(0, totalAfterDiscount - advance);
+  }
+  document.getElementById('discount').addEventListener('input', calculateTotal);
+  document.getElementById('advance').addEventListener('input', calculateTotal);
+
+  // On page load, check for a space_id in the URL to pre-select
+  document.addEventListener('DOMContentLoaded', () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const spaceIdFromUrl = urlParams.get('space_id');
+    if (spaceIdFromUrl) {
+      const spaceToSelect = spaces.find(s => s.id == spaceIdFromUrl);
+      if (spaceToSelect) {
+        spaceTypeSelect.value = spaceToSelect.type;
+        populateSpaces(spaceToSelect.type);
+        spaceSelect.value = spaceToSelect.id;
+        updateDetailsForSpace(spaceToSelect.id);
+      }
+    }
+  });
+</script>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,48 @@
+<%- include('partials/header') %>
+
+<div class="container mt-4">
+  <div class="row justify-content-center">
+    <div class="col-md-8">
+      <div class="card">
+        <div class="card-header">
+          <h2><%= title %></h2>
+        </div>
+        <div class="card-body">
+          <form action="/settings/address" method="POST" enctype="multipart/form-data">
+            <div class="mb-3">
+              <label for="name" class="form-label">Exhibition Name</label>
+              <input type="text" class="form-control" id="name" name="name" value="<%= details.name %>" placeholder="e.g., National Consumer Fair" required>
+            </div>
+            <div class="mb-3">
+              <label for="address" class="form-label">Address Line</label>
+              <input type="text" class="form-control" id="address" name="address" value="<%= details.address %>" placeholder="e.g., Akshaya Nagar" required>
+            </div>
+            <div class="mb-3">
+              <label for="location" class="form-label">City/Location</label>
+              <input type="text" class="form-control" id="location" name="location" value="<%= details.location %>" placeholder="e.g., Bengaluru" required>
+            </div>
+            <div class="mb-3">
+              <label for="place" class="form-label">Place</label>
+              <input type="text" class="form-control" id="place" name="place" value="<%= details.place %>" placeholder="e.g., Main Ground">
+            </div>
+            <div class="mb-3">
+              <label for="logo" class="form-label">Exhibition Logo</label>
+              <input type="file" class="form-control" id="logo" name="logo" accept="image/*">
+              <input type="hidden" name="existing_logo_path" value="<%= details.logo_path %>">
+              <% if (details.logo_path) { %>
+                <div class="mt-2">
+                  <p>Current Logo:</p>
+                  <img src="<%= details.logo_path %>" alt="Current Logo" style="max-height: 100px; border: 1px solid #ddd; padding: 5px;">
+                </div>
+              <% } %>
+            </div>
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="/" class="btn btn-secondary">Cancel</a>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

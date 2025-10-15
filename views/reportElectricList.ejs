@@ -1,0 +1,121 @@
+<%- include('partials/header') %>
+
+<div class="card">
+    <div class="card-header">
+        <div class="row">
+            <div class="col-md-6">
+                <h3 class="mb-0"><%= title %></h3>
+            </div>
+            <div class="col-md-4">
+                <input type="text" id="searchInput" class="form-control" placeholder="Search bills...">
+            </div>
+            <div class="col-md-2 text-end">
+                <button onclick="window.print()" class="btn btn-primary d-print-none me-1" title="Print Report"><i class="fas fa-print"></i> Print</button>
+                <button id="download-excel" class="btn btn-success d-print-none" title="Download Excel"><i class="fas fa-file-excel"></i> Excel</button>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table id="reportTable" class="table table-bordered table-striped table-hover">
+                <thead class="thead-dark">
+                    <tr>
+                        <th data-sort-dir="asc">Date <i class="fas fa-sort"></i></th>
+                        <th data-sort-dir="asc">Exhibitor <i class="fas fa-sort"></i></th>
+                        <th data-sort-dir="asc">Space <i class="fas fa-sort"></i></th>
+                        <th data-sort-dir="asc">Item <i class="fas fa-sort"></i></th>
+                        <th class="text-center" data-sort-dir="asc">Qty <i class="fas fa-sort"></i></th>
+                        <th class="text-end" data-sort-dir="asc">Amount (₹) <i class="fas fa-sort"></i></th>
+                        <th class="text-end" data-sort-dir="asc">Bill Total (₹) <i class="fas fa-sort"></i></th>
+                    </tr>
+                </thead>
+                <tbody id="reportTableBody">
+                    <% if (bills && bills.length > 0) { %>
+                        <% bills.forEach(bill => { %>
+                            <% if (bill.items && bill.items.length > 0) { %>
+                                <% bill.items.forEach((item, index) => { %>
+                                    <tr>
+                                        <% if (index === 0) { %>
+                                            <td rowspan="<%= bill.items.length %>" style="vertical-align: middle;"><%= new Date(bill.bill_date).toLocaleDateString() %></td>
+                                            <td rowspan="<%= bill.items.length %>" style="vertical-align: middle;"><%= bill.exhibitor_name %> <% if (bill.facia_name) { %>(<%= bill.facia_name %>)<% } %></td>
+                                            <td rowspan="<%= bill.items.length %>" style="vertical-align: middle;"><%= bill.space_name %></td>
+                                        <% } %>
+                                        <td><%= item.name %></td>
+                                        <td class="text-center"><%= item.quantity %></td>
+                                        <td class="text-end"><%= (item.total || 0).toFixed(2) %></td>
+                                        <% if (index === 0) { %>
+                                            <td rowspan="<%= bill.items.length %>" class="text-end fw-bold" style="vertical-align: middle;"><%= (bill.total_amount || 0).toFixed(2) %></td>
+                                        <% } %>
+                                    </tr>
+                                <% }); %>
+                            <% } else { %>
+                                <tr>
+                                    <td><%= new Date(bill.bill_date).toLocaleDateString() %></td>
+                                    <td><%= bill.exhibitor_name %> <% if (bill.facia_name) { %>(<%= bill.facia_name %>)<% } %></td>
+                                    <td><%= bill.space_name %></td>
+                                    <td colspan="3" class="text-center text-muted">No items for this bill</td>
+                                    <td class="text-end fw-bold"><%= (bill.total_amount || 0).toFixed(2) %></td>
+                                </tr>
+                            <% } %>
+                        <% }); %>
+                    <% } else { %>
+                        <tr>
+                            <td colspan="7" class="text-center text-muted">No electrical bills found.</td>
+                        </tr>
+                    <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('download-excel').addEventListener('click', function() {
+        window.location.href = '/report/downloadExcelElectric';
+    });
+
+    const searchInput = document.getElementById('searchInput');
+    const tableBody = document.getElementById('reportTableBody');
+    const tableRows = Array.from(tableBody.getElementsByTagName('tr'));
+
+    searchInput.addEventListener('keyup', (e) => {
+        const searchTerm = e.target.value.toLowerCase();
+        tableRows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            row.style.display = text.includes(searchTerm) ? '' : 'none';
+        });
+    });
+
+    document.querySelectorAll('#reportTable thead th').forEach((header, colIndex) => {
+        if (!header.hasAttribute('data-sort-dir')) return;
+        header.addEventListener('click', () => {
+            const sortDir = header.dataset.sortDir;
+            const newSortDir = sortDir === 'asc' ? 'desc' : 'asc';
+            header.dataset.sortDir = newSortDir;
+
+            document.querySelectorAll('#reportTable thead th i').forEach(i => i.className = 'fas fa-sort');
+            header.querySelector('i').className = newSortDir === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down';
+
+            const rows = Array.from(tableBody.querySelectorAll('tr'));
+
+            rows.sort((a, b) => {
+                let valA = a.cells[colIndex].textContent.trim();
+                let valB = b.cells[colIndex].textContent.trim();
+
+                if (!isNaN(valA.replace(/[^0-9.-]/g, '')) && !isNaN(valB.replace(/[^0-9.-]/g, ''))) {
+                    valA = parseFloat(valA.replace(/[^0-9.-]/g, ''));
+                    valB = parseFloat(valB.replace(/[^0-9.-]/g, ''));
+                } else {
+                    valA = valA.toLowerCase();
+                    valB = valB.toLowerCase();
+                }
+
+                return (valA < valB ? -1 : (valA > valB ? 1 : 0)) * (newSortDir === 'asc' ? 1 : -1);
+            });
+
+            rows.forEach(row => tableBody.appendChild(row));
+        });
+    });
+</script>
+
+<%- include('partials/footer') %>

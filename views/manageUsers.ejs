@@ -1,0 +1,184 @@
+<%- include('partials/header') %>
+
+<div class="container mt-4">
+
+  <% if (error) { %>
+    <div class="alert alert-danger"><%= error %></div>
+  <% } %>
+  <% if (success) { %>
+    <div class="alert alert-success"><%= success %></div>
+  <% } %>
+
+  <!-- Add User Form -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h4>Add New User</h4>
+    </div>
+    <div class="card-body">
+      <form action="/users/add" method="POST" class="row g-3">
+        <div class="col-md-4">
+          <label for="username" class="form-label">Username</label>
+          <input type="text" class="form-control" id="username" name="username" required>
+        </div>
+        <div class="col-md-4">
+          <label for="password" class="form-label">Password</label>
+          <input type="password" class="form-control" id="password" name="password" required>
+        </div>
+        <div class="col-md-3">
+          <label for="role" class="form-label">Role</label>
+          <select id="role" name="role" class="form-select">
+            <option value="user" selected>User</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div class="col-md-1 d-flex align-items-end">
+          <button type="submit" class="btn btn-primary w-100">Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Existing Users Table -->
+  <div class="card">
+    <div class="card-header">
+      <h4>Existing Users</h4>
+    </div>
+    <div class="card-body">
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Role</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% users.forEach(u => { %>
+            <tr>
+              <td><%= u.username %></td>
+              <td><span class="badge bg-secondary"><%= u.role %></span></td>
+              <td>
+                <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editUserModal" data-id="<%= u.id %>" data-username="<%= u.username %>" data-role="<%= u.role %>">
+                  Edit
+                </button>
+                <button class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#resetPasswordModal" data-id="<%= u.id %>" data-username="<%= u.username %>" <%= user.id === u.id ? 'disabled' : '' %>>
+                  Reset Password
+                </button>
+                <form action="/users/delete/<%= u.id %>" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this user?');">
+                  <button type="submit" class="btn btn-sm btn-danger" <%= user.id === u.id ? 'disabled' : '' %>>
+                    Delete
+                  </button>
+                </form>
+              </td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Edit User Modal -->
+<div class="modal fade" id="editUserModal" tabindex="-1" aria-labelledby="editUserModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="editUserForm" method="POST">
+        <div class="modal-header">
+          <h5 class="modal-title" id="editUserModalLabel">Edit User</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="edit_username" class="form-label">Username</label>
+            <input type="text" class="form-control" id="edit_username" name="username" required>
+          </div>
+          <div class="mb-3">
+            <label for="edit_role" class="form-label">Role</label>
+            <select id="edit_role" name="role" class="form-select">
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <p class="small text-muted">Note: Password cannot be changed from this form.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div class="modal fade" id="resetPasswordModal" tabindex="-1" aria-labelledby="resetPasswordModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="resetPasswordForm" method="POST">
+        <div class="modal-header">
+          <h5 class="modal-title" id="resetPasswordModalLabel">Reset Password</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>You are resetting the password for user: <strong id="reset-username"></strong></p>
+          <div class="mb-3">
+            <label for="reset_new_password" class="form-label">New Password</label>
+            <input type="password" class="form-control" id="reset_new_password" name="newPassword" required>
+          </div>
+          <div class="mb-3">
+            <label for="reset_confirm_password" class="form-label">Confirm New Password</label>
+            <input type="password" class="form-control" id="reset_confirm_password" name="confirmPassword" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn btn-primary">Reset Password</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  const editUserModal = document.getElementById('editUserModal');
+  editUserModal.addEventListener('show.bs.modal', function (event) {
+    const button = event.relatedTarget;
+    const userId = button.getAttribute('data-id');
+    const username = button.getAttribute('data-username');
+    const role = button.getAttribute('data-role');
+
+    const modalForm = editUserModal.querySelector('#editUserForm');
+    const usernameInput = editUserModal.querySelector('#edit_username');
+    const roleInput = editUserModal.querySelector('#edit_role');
+
+    modalForm.action = `/users/edit/${userId}`;
+    usernameInput.value = username;
+    roleInput.value = role;
+  });
+
+  const resetPasswordModal = document.getElementById('resetPasswordModal');
+  resetPasswordModal.addEventListener('show.bs.modal', function (event) {
+    const button = event.relatedTarget;
+    const userId = button.getAttribute('data-id');
+    const username = button.getAttribute('data-username');
+
+    const modalForm = resetPasswordModal.querySelector('#resetPasswordForm');
+    const usernameDisplay = resetPasswordModal.querySelector('#reset-username');
+
+    modalForm.action = `/users/reset-password/${userId}`;
+    usernameDisplay.textContent = username;
+  });
+
+  // Add client-side validation for the reset password form
+  const resetForm = document.getElementById('resetPasswordForm');
+  resetForm.addEventListener('submit', function(event) {
+    const newPassword = document.getElementById('reset_new_password').value;
+    const confirmPassword = document.getElementById('reset_confirm_password').value;
+    if (newPassword !== confirmPassword) {
+      event.preventDefault();
+      alert('New passwords do not match.');
+    }
+  });
+</script>
+
+<%- include('partials/footer') %>

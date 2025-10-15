@@ -1,0 +1,39 @@
+<%- include('partials/header') %>
+
+<div class="card">
+  <div class="card-header">
+    <h2>Invoice #<%= booking.id %></h2>
+    <p><strong>Booking Date:</strong> <%= new Date(booking.booking_date).toLocaleDateString() %></p>
+  </div>
+  <div class="card-body">
+    <h5 class="card-title">Exhibitor Details</h5>
+    <p><strong>Name:</strong> <%= booking.client_name %></p>
+    <p><strong>Contact:</strong> <%= booking.contact %></p>
+    <hr>
+    <h5 class="card-title">Space Details</h5>
+    <p><strong>Space:</strong> <%= booking.space_name %> (<%= booking.space_type %>)</p>
+    <p><strong>Facilities:</strong> <%= booking.facilities || 'N/A' %></p>
+    <hr>
+    <h5 class="card-title">Billing Details</h5>
+    <table class="table">
+      <tr>
+        <td>Base Rent:</td>
+        <td class="text-end">₹<%= booking.rent_amount %></td>
+      </tr>
+      <tr>
+        <td>Discount:</td>
+        <td class="text-end">- ₹<%= booking.discount %></td>
+      </tr>
+      <tr class="fw-bold">
+        <td>Total Amount:</td>
+        <td class="text-end">₹<%= booking.total %></td>
+      </tr>
+    </table>
+  </div>
+  <div class="card-footer text-end">
+    <button class="btn btn-primary" onclick="window.print()">Print Invoice</button>
+    <a href="/booking/list" class="btn btn-secondary">Back to Bookings</a>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

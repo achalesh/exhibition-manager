@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title><%= title ? `${title} | ${appName}` : appName %></title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+</head>
+<body class="container-fluid mt-4">
+
+  <header class="mb-4 p-5 text-white rounded-3 shadow-sm" style="background-color: #FF4500;">
+    <div class="d-flex justify-content-between align-items-center">
+      <div class="d-flex align-items-center">
+        <% if (exhibitionDetails.logo_path) { %>
+          <img src="<%= exhibitionDetails.logo_path %>" alt="Logo" style="height: 80px; margin-right: 20px;">
+        <% } %>
+        <div>
+          <h1 class="display-5 fw-bold"><%= exhibitionDetails.name %></h1>
+          <p class="fs-5 mb-0"><%= exhibitionDetails.address %>, <%= exhibitionDetails.location %></p>
+        </div>
+      </div>
+      <div class="text-end">
+        <p class="lead mb-0" id="event-details"></p>
+      </div>
+    </div>
+  </header>
+
+  <nav class="navbar navbar-expand-lg navbar-light mb-4 shadow-sm" style="background-color: #FFD700;">
+    <div class="container-fluid">
+      <a class="navbar-brand fw-bold" href="/"><%= appName %></a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+          <li class="nav-item"><a class="nav-link" href="/"><i class="bi bi-speedometer2 me-1"></i>Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link" href="/booking/list"><i class="bi bi-list-ul me-1"></i>View Bookings</a></li>
+          <li class="nav-item"><a class="nav-link" href="/booking/add"><i class="bi bi-plus-square me-1"></i>Book Space</a></li>
+          <li class="nav-item"><a class="nav-link" href="/material/issue"><i class="bi bi-box-seam me-1"></i>Issue Materials</a></li>
+          <li class="nav-item"><a class="nav-link" href="/electric/add"><i class="bi bi-lightning-charge me-1"></i>Electric Bill</a></li>
+          <li class="nav-item"><a class="nav-link" href="/shed/allocate"><i class="bi bi-building-add me-1"></i>Allocate Shed</a></li>
+          <% if (user && user.role === 'admin') { %>
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" id="navbarSettings" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-gear-fill me-1"></i>Settings
+              </a>
+              <ul class="dropdown-menu" aria-labelledby="navbarSettings">
+                <li><a class="dropdown-item" href="/space/add"><i class="bi bi-grid me-2"></i>Manage Spaces</a></li>
+                <li><a class="dropdown-item" href="/shed/manage"><i class="bi bi-building-gear me-2"></i>Manage Sheds</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="/report"><i class="bi bi-file-earmark-bar-graph me-2"></i>Reports</a></li>
+                <li><a class="dropdown-item" href="/charges/add"><i class="bi bi-currency-rupee me-2"></i>Receive Payments</a></li>
+                <li><a class="dropdown-item" href="/staff/list"><i class="bi bi-people me-2"></i>Manage Staff</a></li>
+                <li><a class="dropdown-item" href="/settings/address"><i class="bi bi-geo-alt me-2"></i>Exhibition Address</a></li>
+                  <li><hr class="dropdown-divider"></li>
+                  <li><a class="dropdown-item" href="/users/manage"><i class="bi bi-person-plus me-2"></i>Manage Users</a></li>
+                  <li><a class="dropdown-item" href="/report/audit-log"><i class="bi bi-journal-text me-2"></i>View Audit Log</a></li>
+              </ul>
+            </li>
+          <% } %>
+          <% if (user) { %>
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" id="userMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-person-circle"></i> <%= user.username %>
+              </a>
+              <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userMenu">
+                <li><a class="dropdown-item" href="/change-password">Change Password</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="/logout">Logout</a></li>
+              </ul>
+            </li>
+          <% } %>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <% if (locals.flash) { %>
+    <div class="container">
+      <div class="alert alert-<%= flash.type %> alert-dismissible fade show" role="alert">
+        <%= flash.message %>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    </div>
+  <% } %>
+
+  <% if (locals.currentPath && currentPath.startsWith('/report/') && currentPath !== '/report') { %>
+    <div class="container mb-3">
+      <a href="/report" class="btn btn-outline-secondary btn-sm">« Back to Reports Menu</a>
+    </div>
+  <% } %>
+
+  <main class="container">

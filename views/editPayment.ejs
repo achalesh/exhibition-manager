@@ -1,0 +1,51 @@
+<%- include('partials/header') %>
+
+<div class="container mt-4">
+  <div class="card">
+    <div class="card-header">
+      <h2><%= title %></h2>
+    </div>
+    <div class="card-body">
+      <form action="/charges/edit/<%= payment.id %>" method="POST">
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label for="booking_id" class="form-label">Exhibitor</label>
+            <select class="form-select" id="booking_id" name="booking_id" disabled>
+              <% bookings.forEach(b => { %>
+                <option value="<%= b.id %>" <%= payment.booking_id == b.id ? 'selected' : '' %>>
+                  <%= b.exhibitor_name %>
+                </option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label for="payment_type" class="form-label">Payment For</label>
+            <input type="text" class="form-control" id="payment_type" name="payment_type" value="<%= payment.type.charAt(0).toUpperCase() + payment.type.slice(1) %>" readonly>
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-4">
+            <label for="receipt_number" class="form-label">Receipt Number</label>
+            <input type="text" class="form-control" id="receipt_number" name="receipt_number" value="<%= payment.receipt_number || '' %>" <%= payment.type !== 'rent' ? 'readonly' : '' %>>
+          </div>
+          <div class="col-md-4">
+            <label for="payment_date" class="form-label">Payment Date</label>
+            <input type="date" class="form-control" id="payment_date" name="payment_date" value="<%= new Date(payment.payment_date).toISOString().split('T')[0] %>" required>
+          </div>
+          <div class="col-md-4">
+            <label for="amount_paid" class="form-label">Amount Paid (₹)</label>
+            <input type="number" step="0.01" class="form-control" id="amount_paid" name="amount_paid" value="<%= payment.amount %>" required>
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <button type="submit" class="btn btn-primary">Update Payment</button>
+          <a href="/booking/details-full/<%= payment.booking_id %>" class="btn btn-secondary">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

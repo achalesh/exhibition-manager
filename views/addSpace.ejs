@@ -1,0 +1,125 @@
+<%- include('partials/header') %>
+
+<div class="row">
+  <!-- Add Space Form -->
+  <div class="col-md-4">
+    <h2 class="mb-3">Add a New Space</h2>
+    <form method="POST" action="/space/add" class="needs-validation" novalidate>
+      
+      <div class="mb-3">
+        <label class="form-label">Space Type</label>
+        <select class="form-select" id="space_type" name="type" required>
+          <option value="" disabled selected>Select Type</option>
+          <option value="Pavilion">🏢 Pavilion</option>
+          <option value="Stall">🧺 Stall</option>
+          <option value="Booth">🎪 Booth</option>
+          <option value="SpecialZone">🔲 Special Zone</option>
+        </select>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Space Name</label>
+        <input type="text" class="form-control" name="name" required>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Size</label>
+        <input type="text" class="form-control" name="size" list="size-suggestions">
+        <datalist id="size-suggestions">
+          <% suggestions.sizes.forEach(item => { %>
+            <option value="<%= item %>">
+          <% }) %>
+        </datalist>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Rent Amount (₹)</label>
+        <input type="number" class="form-control" name="rent_amount" required min="0">
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Facilities</label>
+        <input type="text" class="form-control" name="facilities" list="facilities-suggestions">
+        <datalist id="facilities-suggestions">
+          <% suggestions.facilities.forEach(item => { %>
+            <option value="<%= item %>">
+          <% }) %>
+        </datalist>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Location</label>
+        <input type="text" class="form-control" name="location" list="location-suggestions">
+        <datalist id="location-suggestions">
+          <% suggestions.locations.forEach(item => { %>
+            <option value="<%= item %>">
+          <% }) %>
+        </datalist>
+      </div>
+
+      <button type="submit" class="btn btn-primary">Add Space</button>
+    </form>
+  </div>
+
+  <!-- Space List -->
+  <div class="col-md-8">
+    <h2 class="mb-3">All Spaces</h2>
+    <ul class="list-group" id="space-list">
+      <% spaces.forEach(s => { %>
+        <li class="list-group-item d-flex justify-content-between align-items-center" data-type="<%= s.type %>">
+          <div>
+            <strong><%= s.name %> (<%= s.type %>)</strong> — <%= s.size %> — ₹<%= s.rent_amount %>
+          </div>
+          <div>
+            <span class="badge bg-<%= s.status === 'Available' ? 'success' : 'danger' %> me-2">
+              <%= s.status %>
+            </span>
+            <a href="/space/edit/<%= s.id %>" class="btn btn-sm btn-warning">Edit</a>
+            <a href="/space/delete/<%= s.id %>" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure?');">Delete</a>
+          </div>
+        </li>
+      <% }) %>
+    </ul>
+
+    <hr class="my-4">
+
+    <h2 class="mb-3">Import Spaces</h2>
+    <form action="/space/import" method="POST" enctype="multipart/form-data" class="mb-4 p-3 border rounded">
+      <div class="mb-3">
+        <label for="csvfile" class="form-label">Upload CSV File</label>
+        <input class="form-control" type="file" id="csvfile" name="csvfile" accept=".csv" required>
+      </div>
+      <button type="submit" class="btn btn-secondary">Import from CSV</button>
+    </form>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const spaceTypeSelect = document.getElementById('space_type');
+    const spaceList = document.getElementById('space-list');
+    const allSpaces = Array.from(spaceList.getElementsByTagName('li'));
+
+    // Function to filter the list
+    const filterSpaces = () => {
+      const selectedType = spaceTypeSelect.value;
+
+      allSpaces.forEach(item => {
+        // If no type is selected, or if the item's type matches, show it. Otherwise, hide it.
+        const isVisible = !selectedType || item.dataset.type === selectedType;
+        item.style.display = isVisible ? 'flex' : 'none';
+      });
+    };
+
+    // Add event listener to the dropdown
+    spaceTypeSelect.addEventListener('change', filterSpaces);
+
+    // Initial filter on page load (in case a value is pre-selected)
+    // We'll leave all visible by default as requested.
+    allSpaces.forEach(item => {
+        item.style.display = 'flex';
+    });
+  });
+</script>
+
+<%- include('partials/footer') %>

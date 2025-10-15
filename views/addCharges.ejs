@@ -1,0 +1,165 @@
+<%- include('partials/header') %>
+
+<div class="container mt-4">
+  <div class="card">
+    <div class="card-header">
+      <h2><%= title %></h2>
+    </div>
+    <div class="card-body">
+      <form action="/charges/add" method="POST" id="payment-form">
+        
+        <!-- Booking Selection -->
+        <div class="mb-3">
+          <label for="booking_id" class="form-label">Select Exhibitor</label>
+          <select class="form-select" id="booking_id" name="booking_id" required>
+            <option value="" selected disabled>-- Choose an Exhibitor --</option>
+            <% bookings.forEach(booking => { %>
+              <option value="<%= booking.id %>"><%= booking.exhibitor_name %> (<%= booking.space_name %>)</option>
+            <% }) %>
+          </select>
+        </div>
+
+        <!-- Due Details (populated by JS) -->
+        <div id="due-details" class="mb-4" style="display: none;">
+          <h5>Current Dues</h5>
+          <ul class="list-group">
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+              Rent Due
+              <span class="badge bg-primary rounded-pill" id="rent-due">₹0.00</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+              Electric Bill Due
+              <span class="badge bg-primary rounded-pill" id="electric-due">₹0.00</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+              Material Bill Due
+              <span class="badge bg-primary rounded-pill" id="material-due">₹0.00</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+              Shed Rent Due
+              <span class="badge bg-primary rounded-pill" id="shed-due">₹0.00</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center list-group-item-dark">
+              <strong>Total Due</strong>
+              <strong id="total-due">₹0.00</strong>
+            </li>
+          </ul>
+        </div>
+
+        <hr>
+
+        <!-- Payment Fields -->
+        <div id="payment-fields" style="display: none;">
+          <h4 class="mb-3">Enter Payment</h4>
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label for="payment_type" class="form-label">Payment For</label>
+              <select class="form-select" id="payment_type" name="payment_type">
+                <option value="rent">Rent</option>
+                <option value="electric">Electric Bill</option>
+                <option value="material">Material Bill</option>
+                <option value="shed">Shed Rent</option>
+              </select>
+            </div>
+            <div class="col-md-2 mb-3">
+              <label for="cash_paid" class="form-label">Cash Paid (₹)</label>
+              <input type="number" class="form-control payment-amount" id="cash_paid" name="cash_paid" value="0" min="0" step="0.01">
+            </div>
+            <div class="col-md-2 mb-3">
+              <label for="upi_paid" class="form-label">UPI Paid (₹)</label>
+              <input type="number" class="form-control payment-amount" id="upi_paid" name="upi_paid" value="0" min="0" step="0.01">
+            </div>
+            <div class="col-md-4 mb-3">
+              <label for="balance_due" class="form-label">Balance (₹)</label>
+              <input type="number" class="form-control" id="balance_due" name="balance_due" readonly>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3" id="receipt-number-group">
+              <label for="receipt_number" class="form-label">Receipt Number</label>
+              <input type="text" class="form-control" id="receipt_number" name="receipt_number">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="payment_date" class="form-label">Receipt Date</label>
+              <input type="date" class="form-control" id="payment_date" name="payment_date" required>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-success w-100">Receive Payment</button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const bookingSelect = document.getElementById('booking_id');
+    const dueDetails = document.getElementById('due-details');
+    const paymentFields = document.getElementById('payment-fields');
+    const paymentTypeSelect = document.getElementById('payment_type');
+    const amountInputs = document.querySelectorAll('.payment-amount');
+    const balanceDueInput = document.getElementById('balance_due');
+    const receiptGroup = document.getElementById('receipt-number-group');
+
+    // Set focus on the exhibitor dropdown on page load
+    bookingSelect.focus();
+
+    // Set default receipt date to today
+    document.getElementById('payment_date').valueAsDate = new Date();
+
+    bookingSelect.addEventListener('change', async function() {
+      const bookingId = this.value;
+      if (!bookingId) {
+        dueDetails.style.display = 'none';
+        paymentFields.style.display = 'none';
+        return;
+      }
+
+      try {
+        const response = await fetch(`/charges/details/${bookingId}`);
+        const dues = await response.json();
+
+        document.getElementById('rent-due').textContent = `₹${(dues.rent_due || 0).toFixed(2)}`;
+        document.getElementById('electric-due').textContent = `₹${(dues.electric_due || 0).toFixed(2)}`;
+        document.getElementById('material-due').textContent = `₹${(dues.material_due || 0).toFixed(2)}`;
+        document.getElementById('shed-due').textContent = `₹${(dues.shed_due || 0).toFixed(2)}`;
+        document.getElementById('total-due').textContent = `₹${(dues.total_due || 0).toFixed(2)}`;
+
+        dueDetails.style.display = 'block';
+        paymentFields.style.display = 'block';
+        calculateBalance();
+      } catch (error) {
+        console.error('Failed to fetch due details:', error);
+        alert('Could not fetch due details for the selected exhibitor.');
+      }
+    });
+
+    amountInputs.forEach(input => {
+      input.addEventListener('input', calculateBalance);
+    });
+
+    function calculateBalance() {
+      const totalDue = parseFloat(document.getElementById('total-due').textContent.replace('₹', '')) || 0;
+      const cashPaid = parseFloat(document.getElementById('cash_paid').value) || 0;
+      const upiPaid = parseFloat(document.getElementById('upi_paid').value) || 0;
+      const amountPaid = cashPaid + upiPaid;
+      balanceDueInput.value = (totalDue - amountPaid).toFixed(2);
+    }
+
+    paymentTypeSelect.addEventListener('change', function() {
+      if (this.value === 'rent') {
+        receiptGroup.style.display = 'block';
+        document.getElementById('receipt_number').required = true;
+      } else {
+        receiptGroup.style.display = 'none';
+        document.getElementById('receipt_number').required = false;
+      }
+    });
+
+    // Initial check
+    paymentTypeSelect.dispatchEvent(new Event('change'));
+  });
+</script>
+
+<%- include('partials/footer') %>
