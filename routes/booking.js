@@ -149,8 +149,29 @@ router.get('/confirmation/:id', async (req, res) => {
 
 // GET: Show full details for a booking, including materials and electric bills
 router.get('/details-full/:id', async (req, res) => {
-  const bookingId = req.params.id;
+  const bookingId = parseInt(req.params.id, 10);
   try {
+    // --- Logic for Next/Back buttons ---
+    const orderedBookingsSql = `
+      SELECT b.id
+      FROM bookings b
+      JOIN spaces s ON b.space_id = s.id
+      ORDER BY
+        CASE s.type
+          WHEN 'Pavilion' THEN 1
+          WHEN 'Stall' THEN 2
+          WHEN 'Booth' THEN 3
+          ELSE 4
+        END,
+        s.name
+    `;
+    const allBookingIds = (await all(orderedBookingsSql)).map(b => b.id);
+    const currentIndex = allBookingIds.indexOf(bookingId);
+
+    const previousId = currentIndex > 0 ? allBookingIds[currentIndex - 1] : null;
+    const nextId = currentIndex < allBookingIds.length - 1 ? allBookingIds[currentIndex + 1] : null;
+    // --- End Logic for Next/Back buttons ---
+
     // Fetch booking, client, and space details
     const bookingSql = `
       SELECT b.*, c.name as client_name, s.name as space_name, s.type as space_type
@@ -232,7 +253,9 @@ router.get('/details-full/:id', async (req, res) => {
       booking,
       materials,
       electricBills,
-      shedAllocations
+      shedAllocations,
+      previousId,
+      nextId
     });
 
   } catch (err) {
