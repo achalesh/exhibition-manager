@@ -1,3 +1,5 @@
+console.log("Starting Exhibition Rental App...");
+
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
