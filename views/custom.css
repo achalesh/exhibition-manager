@@ -1,0 +1,113 @@
+/* General Body & Layout */
+body {
+  background-color: #f0f2f5; /* A modern, light grey background */
+}
+
+/* On mobile screens, make the container full-width for more space */
+@media (max-width: 767.98px) {
+  .container, .container-sm, .container-md, .container-lg, .container-xl, .container-xxl {
+    max-width: 100%;
+  }
+}
+
+/* Typography Overrides */
+:root, [data-bs-theme=light] {
+  --bs-body-font-size: 2.5rem;
+}
+
+.navbar {
+  --bs-navbar-brand-font-size: 2rem;
+}
+
+.h4, h4 {
+  font-size: calc(2rem + .3vw);
+}
+
+.h5, h5 {
+  font-size: 2rem;
+}
+
+.text-center {
+  text-align: center !important;
+  font-size: 1.8rem;
+}
+
+/* Header & Navigation */
+.main-header {
+  background-color: #FF4500; /* Orangered */
+}
+
+.main-header .logo {
+  height: 80px;
+  margin-right: 20px;
+}
+
+.main-nav {
+  background-color: #FFD700; /* Gold */
+}
+
+/* Dashboard Specific Styles */
+.glass-card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(8px);
+  border-radius: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+}
+
+.glass-card .card-header {
+  background: rgba(255, 255, 255, 0.5);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+  border-top-left-radius: 15px;
+  border-top-right-radius: 15px;
+}
+
+.summary-card {
+  border: none;
+  border-radius: 15px;
+  color: white;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.summary-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 20px rgba(0,0,0,0.15) !important;
+}
+
+.summary-card .card-body i {
+  opacity: 0.7;
+}
+
+.card-total { background: linear-gradient(135deg, #4e54c8, #8f94fb); }
+.card-available { background: linear-gradient(135deg, #1d976c, #93f9b9); }
+.card-booked { background: linear-gradient(135deg, #d31027, #ea384d); }
+.card-categories { background: linear-gradient(135deg, #00c6ff, #0072ff); }
+
+.space-card {
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  text-align: center;
+  color: #333;
+  transition: transform 0.2s;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.space-card:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.space-card.available { background-color: #d4edda; border-color: #c3e6cb; }
+.space-card.booked { background-color: #f8d7da; border-color: #f5c6cb; }
+
+.space-name {
+  font-size: 2rem;
+  color: deeppink;
+}
+
+.space-status {
+  color: #555;
+}
