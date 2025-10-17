@@ -24,23 +24,27 @@
         <div class="row">
             <div class="col-md-6">
                 <h4>Exhibitor Details</h4>
-                <table class="table table-sm table-bordered">
-                    <tr><th style="width: 35%;">Exhibitor Name</th><td><%= booking.exhibitor_name %></td></tr>
-                    <tr><th>Facia Name</th><td><%= booking.facia_name || 'N/A' %></td></tr>
-                    <tr><th>Product Category</th><td><%= booking.product_category || 'N/A' %></td></tr>
-                    <tr><th>Contact Person</th><td><%= booking.contact_person %></td></tr>
-                    <tr><th>Contact Number</th><td><%= booking.contact_number %> <%= booking.secondary_number ? ` / ${booking.secondary_number}` : '' %></td></tr>
-                    <tr><th>Address</th><td><%= booking.full_address || 'N/A' %></td></tr>
-                </table>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered">
+                        <tr><th style="width: 35%;">Exhibitor Name</th><td><%= booking.exhibitor_name %></td></tr>
+                        <tr><th>Facia Name</th><td><%= booking.facia_name || 'N/A' %></td></tr>
+                        <tr><th>Product Category</th><td><%= booking.product_category || 'N/A' %></td></tr>
+                        <tr><th>Contact Person</th><td><%= booking.contact_person %></td></tr>
+                        <tr><th>Contact Number</th><td><%= booking.contact_number %> <%= booking.secondary_number ? ` / ${booking.secondary_number}` : '' %></td></tr>
+                        <tr><th>Address</th><td><%= booking.full_address || 'N/A' %></td></tr>
+                    </table>
+                </div>
             </div>
             <div class="col-md-6">
                 <h4>Booking & Space Details</h4>
-                <table class="table table-sm table-bordered">
-                    <tr><th style="width: 35%;">Space Name</th><td><%= booking.space_name %> (<%= booking.space_type %>)</td></tr>
-                    <tr><th>Booking Date</th><td><%= new Date(booking.booking_date).toLocaleDateString() %></td></tr>
-                    <tr><th>Form Submitted</th><td><span class="badge <%= booking.form_submitted ? 'bg-success' : 'bg-danger' %>"><%= booking.form_submitted ? 'Yes' : 'No' %></span></td></tr>
-                    <tr><th>ID Proof</th><td><%= booking.id_proof || 'N/A' %></td></tr>
-                </table>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered">
+                        <tr><th style="width: 35%;">Space Name</th><td><%= booking.space_name %> (<%= booking.space_type %>)</td></tr>
+                        <tr><th>Booking Date</th><td><%= new Date(booking.booking_date).toLocaleDateString() %></td></tr>
+                        <tr><th>Form Submitted</th><td><span class="badge <%= booking.form_submitted ? 'bg-success' : 'bg-danger' %>"><%= booking.form_submitted ? 'Yes' : 'No' %></span></td></tr>
+                        <tr><th>ID Proof</th><td><%= booking.id_proof || 'N/A' %></td></tr>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -48,7 +52,7 @@
 
         <!-- Financial Summary -->
         <h4>Financial Summary</h4>
-        <div class="row">
+        <div class="row g-2">
             <!-- Rent -->
             <div class="col-md-3">
                 <div class="card text-center mb-3">
@@ -129,6 +133,7 @@
                     <a href="/charges/add?booking_id=<%= booking.id %>" class="btn btn-sm btn-success"><i class="fas fa-dollar-sign"></i> Receive Payment</a>
                 </div>
                 <div class="table-responsive">
+
                     <table class="table table-striped mt-2">
                     <thead><tr><th>Date</th><th>Receipt #</th><th>Type</th><th class="text-end">Amount</th><th>Actions</th></tr></thead>
                     <tbody>
@@ -159,6 +164,7 @@
                     <a href="/electric/add?booking_id=<%= booking.id %>" class="btn btn-sm btn-warning"><i class="fas fa-bolt"></i> New Electric Bill</a>
                 </div>
                 <div class="table-responsive">
+
                     <table class="table table-striped mt-2">
                     <thead><tr><th>Date</th><th>Bill #</th><th>Items</th><th class="text-end">Total Amount</th><th>Actions</th></tr></thead>
                     <tbody>
@@ -193,6 +199,7 @@
                     <a href="/material/add?booking_id=<%= booking.id %>" class="btn btn-sm btn-info"><i class="fas fa-box"></i> New Material Issue</a>
                 </div>
                 <div class="table-responsive">
+
                     <table class="table table-striped mt-2">
                     <thead><tr><th>Date</th><th>Issue #</th><th class="text-end">Total Payable</th><th>Actions</th></tr></thead>
                     <tbody>
@@ -222,6 +229,7 @@
                     <a href="/shed/allocate?booking_id=<%= booking.id %>" class="btn btn-sm btn-dark"><i class="fas fa-warehouse"></i> Allocate New Shed</a>
                 </div>
                 <div class="table-responsive">
+
                     <table class="table table-striped mt-2">
                     <thead><tr><th>Date</th><th>Shed Name</th><th class="text-end">Rent</th><th>Actions</th></tr></thead>
                     <tbody>
