@@ -163,7 +163,7 @@
         <div class="card-body">
             <div class="row g-2">
                 <% spacesByType[type].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })).forEach(space => { %>
-                    <div class="col-4 col-sm-4 col-md-3 col-lg-2">
+                    <div class="col-12 col-sm-6 col-md-4 col-lg-3">
                         <a href="/booking/details-full-by-space/<%= space.id %>" class="space-card text-decoration-none d-block h-100 <%= space.status === 'Booked' ? 'booked' : 'available' %>" title="Click for details">
                             <div class="p-2">
                                 <div class="space-name fw-bold"><%= space.name %></div>
