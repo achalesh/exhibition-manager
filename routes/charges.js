@@ -91,10 +91,29 @@ router.post('/add', async (req, res) => {
       db.run('BEGIN TRANSACTION');
       // 1. Insert the detailed payment record
       const paymentSql = `INSERT INTO payments (booking_id, receipt_number, payment_date, payment_mode, cash_paid, upi_paid, ${targetCol}) VALUES (?, ?, ?, ?, ?, ?, ?)`;
-      await run(paymentSql, [booking_id, receipt_number, payment_date, payment_mode, cashAmount, upiAmount, totalPaid]);
+      const { lastID: paymentId } = await run(paymentSql, [booking_id, receipt_number, payment_date, payment_mode, cashAmount, upiAmount, totalPaid]);
 
       // 2. Update the master due_amount on the bookings table
       await run('UPDATE bookings SET due_amount = due_amount - ? WHERE id = ?', [totalPaid, booking_id]);
+
+      // 3. Add to accounting ledger as income
+      const booking = await get('SELECT exhibitor_name FROM bookings WHERE id = ?', [booking_id]);
+      let accountingCategory = 'Booking Payment'; // Default
+      let accountingDescription = `Payment from ${booking.exhibitor_name}`;
+
+      if (payment_type === 'rent') {
+        accountingCategory = 'Rent Payment';
+      } else if (payment_type === 'electric') {
+        accountingCategory = 'Electric Bill Payment';
+      } else if (payment_type === 'material') {
+        accountingCategory = 'Material Issue Payment';
+      } else if (payment_type === 'shed') {
+        accountingCategory = 'Shed Rent Payment';
+      }
+
+      const accountingSql = `INSERT INTO accounting_transactions (payment_id, transaction_type, category, description, amount, transaction_date, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)`;
+      await run(accountingSql, [paymentId, 'income', accountingCategory, accountingDescription, totalPaid, payment_date, req.session.user.id]);
+
 
       db.run('COMMIT');
       // Redirect back to the page with the same exhibitor selected
@@ -164,6 +183,10 @@ router.post('/edit/:id', async (req, res) => {
         if (!targetCol) throw new Error('Could not determine payment type for old payment.');
         await run(`UPDATE payments SET receipt_number = ?, payment_date = ?, ${targetCol} = ? WHERE id = ?`, [receipt_number, payment_date, newAmount, paymentId]);
         await run('UPDATE bookings SET due_amount = due_amount + ? WHERE id = ?', [amountDifference, oldPayment.booking_id]);
+
+        // Update the corresponding accounting transaction
+        await run('UPDATE accounting_transactions SET amount = ?, transaction_date = ? WHERE payment_id = ?', [newAmount, payment_date, paymentId]);
+
         db.run('COMMIT');
         res.redirect(`/booking/details-full/${oldPayment.booking_id}?message=Payment updated successfully.`);
       } catch (err) {
@@ -198,6 +221,10 @@ router.post('/delete/:id', async (req, res) => {
 
       const totalPaid = payment.rent_paid + payment.electric_paid + payment.material_paid + payment.shed_paid;
       await run('UPDATE bookings SET due_amount = due_amount + ? WHERE id = ?', [totalPaid, payment.booking_id]);
+
+      // Delete the corresponding accounting transaction
+      await run('DELETE FROM accounting_transactions WHERE payment_id = ?', [paymentId]);
+
       await run('DELETE FROM payments WHERE id = ?', [paymentId]);
       db.run('COMMIT');
       res.redirect(`/booking/details-full/${payment.booking_id}`);
@@ -258,6 +285,10 @@ router.post('/approve/:edit_id', isAdmin, async (req, res) => {
     if (oldPayment.rent_paid > 0) targetCol = 'rent_paid'; else if (oldPayment.electric_paid > 0) targetCol = 'electric_paid'; else if (oldPayment.material_paid > 0) targetCol = 'material_paid'; else if (oldPayment.shed_paid > 0) targetCol = 'shed_paid';
     await run(`UPDATE payments SET receipt_number = ?, payment_date = ?, ${targetCol} = ? WHERE id = ?`, [receipt_number, payment_date, newAmount, editRequest.payment_id]);
     await run('UPDATE bookings SET due_amount = due_amount + ? WHERE id = ?', [amountDifference, oldPayment.booking_id]);
+    
+    // Update the corresponding accounting transaction
+    await run('UPDATE accounting_transactions SET amount = ?, transaction_date = ? WHERE payment_id = ?', [newAmount, payment_date, editRequest.payment_id]);
+
     await run(`UPDATE payment_edits SET status = 'approved' WHERE id = ?`, [editId]);
     db.run('COMMIT');
 

@@ -21,6 +21,36 @@ function run(sql, params = []) {
   });
 }
 
+/**
+ * Promisified version of db.all() for the setup script.
+ * @param {string} sql The SQL query to execute.
+ * @param {Array} params The parameters to bind to the query.
+ * @returns {Promise<Array>}
+ */
+function all(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+      if (err) reject(err);
+      else resolve(rows);
+    });
+  });
+}
+
+/**
+ * Promisified version of db.get() for the setup script.
+ * @param {string} sql The SQL query to execute.
+ * @param {Array} params The parameters to bind to the query.
+ * @returns {Promise<Object>}
+ */
+function get(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => {
+      if (err) reject(err);
+      else resolve(row);
+    });
+  });
+}
+
 async function setupDatabase() {
   console.log('Starting database setup...');
 
@@ -301,6 +331,64 @@ async function setupDatabase() {
         action TEXT,
         details TEXT
       )`);
+
+      // --- Accounting Transactions Table ---
+      await run(`CREATE TABLE IF NOT EXISTS accounting_transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        payment_id INTEGER UNIQUE,
+        transaction_type TEXT NOT NULL CHECK(transaction_type IN ('income', 'expenditure')),
+        category TEXT NOT NULL,
+        description TEXT,
+        amount REAL NOT NULL,
+        transaction_date DATE NOT NULL,
+        user_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE SET NULL
+      )`);
+      await run(`ALTER TABLE accounting_transactions ADD COLUMN payment_id INTEGER`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
+      await run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_accounting_payment_id ON accounting_transactions (payment_id)`);
+      console.log('Accounting table created.');
+
+      // --- One-time Migration: Move existing payments to accounting ---
+      console.log('Migrating existing payments to accounting ledger...');
+      try {
+        // Clear old payment-related income to avoid duplicates on re-run
+        await run(`DELETE FROM accounting_transactions WHERE payment_id IS NOT NULL OR category LIKE '% Payment'`);
+
+        const payments = await all(`
+          SELECT p.*, b.exhibitor_name 
+          FROM payments p 
+          JOIN bookings b ON p.booking_id = b.id
+        `);
+
+        const adminUser = await get(`SELECT id FROM users WHERE username = 'admin'`);
+        const adminUserId = adminUser ? adminUser.id : null;
+
+        for (const p of payments) {
+          let amount = 0;
+          let payment_type = '';
+
+          if (p.rent_paid > 0) { amount = p.rent_paid; payment_type = 'rent'; }
+          else if (p.electric_paid > 0) { amount = p.electric_paid; payment_type = 'electric'; }
+          else if (p.material_paid > 0) { amount = p.material_paid; payment_type = 'material'; }
+          else if (p.shed_paid > 0) { amount = p.shed_paid; payment_type = 'shed'; }
+
+          if (amount > 0) {
+            const categories = {
+              rent: 'Rent Payment',
+              electric: 'Electric Bill Payment',
+              material: 'Material Issue Payment',
+              shed: 'Shed Rent Payment'
+            };
+            const accountingCategory = categories[payment_type] || 'Booking Payment';
+            const accountingDescription = `Payment from ${p.exhibitor_name}`;
+            const accountingSql = `INSERT INTO accounting_transactions (payment_id, transaction_type, category, description, amount, transaction_date, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)`;
+            await run(accountingSql, [p.id, 'income', accountingCategory, accountingDescription, amount, p.payment_date, adminUserId]);
+          }
+        }
+        console.log(`Migrated ${payments.length} payments to accounting.`);
+      } catch (err) { console.error('Could not migrate payments:', err.message); }
 
       // --- Electric Items Population ---
       console.log('Populating electric_items...');

@@ -1,0 +1,28 @@
+/* /public/css/print.css */
+
+@media print {
+  /* Hide elements that shouldn't be printed */
+  .no-print,
+  .main-header,
+  .main-nav,
+  .alert,
+  .btn,
+  form,
+  footer {
+    display: none !important;
+  }
+
+  /* Ensure the main content takes up the full width */
+  body, .container, .container-fluid {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Remove shadows and ensure borders are visible */
+  .card {
+    box-shadow: none !important;
+    border: 1px solid #dee2e6 !important;
+  }
+}
