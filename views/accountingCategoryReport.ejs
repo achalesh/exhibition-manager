@@ -1,0 +1,228 @@
+<%- include('partials/header') %>
+
+<div class="container-fluid">
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <h1 class="h3 mb-0"><%= title %></h1>
+    <div class="no-print">
+      <button onclick="window.print()" class="btn btn-secondary btn-sm"><i class="bi bi-printer-fill me-1"></i>Print</button>
+      <a href="/accounting" class="btn btn-outline-secondary btn-sm ms-2">« Back to All Transactions</a>
+    </div>
+  </div>
+
+  <!-- Filter Form -->
+  <div class="card shadow-sm mb-4 no-print">
+    <div class="card-header py-3">
+      <h6 class="m-0 fw-bold text-primary">Filter by Date</h6>
+    </div>
+    <div class="card-body">
+      <form action="/accounting/report/by-category" method="GET" class="row g-3 align-items-end">
+        <div class="col-md-3">
+          <label for="start_date" class="form-label">Start Date</label>
+          <input type="date" class="form-control" id="start_date" name="start_date" value="<%= filters.start_date %>">
+        </div>
+        <div class="col-md-3">
+          <label for="end_date" class="form-label">End Date</label>
+          <input type="date" class="form-control" id="end_date" name="end_date" value="<%= filters.end_date %>">
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-primary w-100">Filter</button>
+        </div>
+        <div class="col-md-2">
+          <a href="/accounting/report/by-category/csv?start_date=<%= filters.start_date %>&end_date=<%= filters.end_date %>" class="btn btn-success w-100"><i class="bi bi-download me-1"></i>Export CSV</a>
+        </div>
+        <div class="col-md-2">
+          <a href="/accounting/report/by-category" class="btn btn-secondary w-100">Clear</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Chart Section -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-3"><h6 class="m-0 fw-bold text-primary">Category Overview Chart</h6></div>
+    <div class="card-body">
+      <canvas id="categoryChart" style="max-height: 400px;"></canvas>
+    </div>
+  </div>
+
+  <!-- Pie Charts Section -->
+  <div class="row">
+    <div class="col-lg-6">
+      <div class="card shadow-sm mb-4">
+        <div class="card-header py-3"><h6 class="m-0 fw-bold text-primary">Income by Category</h6></div>
+        <div class="card-body"><canvas id="incomePieChart" style="max-height: 350px;"></canvas></div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card shadow-sm mb-4">
+        <div class="card-header py-3"><h6 class="m-0 fw-bold text-primary">Expenditure by Category</h6></div>
+        <div class="card-body"><canvas id="expenditurePieChart" style="max-height: 350px;"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Report Table -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-3">
+      <h6 class="m-0 fw-bold text-primary">Category Summary</h6>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-bordered" id="dataTable">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th class="text-end">Total Income (₹)</th>
+              <th class="text-end">Total Expenditure (₹)</th>
+              <th class="text-end">Net Change (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% Object.keys(summary).sort().forEach(category => { %>
+              <% const item = summary[category]; %>
+              <% const netChange = item.income - item.expenditure; %>
+              <tr>
+                <td><%= category %></td>
+                <td class="text-end text-success"><%= item.income.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                <td class="text-end text-danger"><%= item.expenditure.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                <td class="text-end fw-bold <%= netChange >= 0 ? 'text-success' : 'text-danger' %>">
+                  <%= netChange.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>
+
+<script>
+  // Helper to generate random colors for pie charts
+  const generateColors = (numColors) => {
+    const colors = [];
+    for (let i = 0; i < numColors; i++) {
+      colors.push(`rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 0.7)`);
+    }
+    return colors;
+  };
+
+  document.addEventListener('DOMContentLoaded', function() {
+    const summaryData = <%- JSON.stringify(summary) %>;
+    const categories = Object.keys(summaryData).sort();
+    
+    const incomeData = categories.map(cat => summaryData[cat].income);
+    const expenditureData = categories.map(cat => summaryData[cat].expenditure);
+    const netChangeData = categories.map(cat => summaryData[cat].income - summaryData[cat].expenditure);
+
+    // --- Bar Chart (Existing) ---
+    const barCtx = document.getElementById('categoryChart').getContext('2d');
+    new Chart(barCtx, {
+      type: 'bar',
+      data: {
+        labels: categories,
+        datasets: [
+          {
+            label: 'Total Income (₹)',
+            data: incomeData,
+            backgroundColor: 'rgba(75, 192, 192, 0.6)', // Greenish
+            borderColor: 'rgba(75, 192, 192, 1)',
+            borderWidth: 1
+          },
+          {
+            label: 'Total Expenditure (₹)',
+            data: expenditureData,
+            backgroundColor: 'rgba(255, 99, 132, 0.6)', // Reddish
+            borderColor: 'rgba(255, 99, 132, 1)',
+            borderWidth: 1
+          },
+          {
+            type: 'line', // Overlay net change as a line
+            label: 'Net Change (₹)',
+            data: netChangeData,
+            borderColor: 'rgba(54, 162, 235, 1)', // Blue
+            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.3,
+            yAxisID: 'y'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            stacked: false,
+            title: { display: true, text: 'Category' }
+          },
+          y: {
+            beginAtZero: true,
+            title: { display: true, text: 'Amount (₹)' }
+          }
+        },
+        plugins: {
+          tooltip: { mode: 'index', intersect: false }
+        }
+      }
+    });
+
+    // --- Income Pie Chart ---
+    const incomeEntries = Object.entries(summaryData).filter(([_, data]) => data.income > 0);
+    if (incomeEntries.length > 0) {
+      const incomePieLabels = incomeEntries.map(([category, _]) => category);
+      const incomePieData = incomeEntries.map(([_, data]) => data.income);
+      const incomePieCtx = document.getElementById('incomePieChart').getContext('2d');
+      new Chart(incomePieCtx, {
+        type: 'pie',
+        data: {
+          labels: incomePieLabels,
+          datasets: [{
+            label: 'Income (₹)',
+            data: incomePieData,
+            backgroundColor: generateColors(incomePieData.length),
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top' },
+            title: { display: false, text: 'Income by Category' }
+          }
+        }
+      });
+    }
+
+    // --- Expenditure Pie Chart ---
+    const expenditureEntries = Object.entries(summaryData).filter(([_, data]) => data.expenditure > 0);
+    if (expenditureEntries.length > 0) {
+      const expenditurePieLabels = expenditureEntries.map(([category, _]) => category);
+      const expenditurePieData = expenditureEntries.map(([_, data]) => data.expenditure);
+      const expenditurePieCtx = document.getElementById('expenditurePieChart').getContext('2d');
+      new Chart(expenditurePieCtx, {
+        type: 'pie',
+        data: {
+          labels: expenditurePieLabels,
+          datasets: [{
+            label: 'Expenditure (₹)',
+            data: expenditurePieData,
+            backgroundColor: generateColors(expenditurePieData.length),
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top' },
+            title: { display: false, text: 'Expenditure by Category' }
+          }
+        }
+      });
+    }
+
+  });
+</script>

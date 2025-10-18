@@ -45,6 +45,7 @@ const reportRoutes = require('./routes/report');
 const staffRoutes = require('./routes/staff');
 const userRoutes = require('./routes/users');
 const authRoutes = require('./routes/auth');
+const accountingRoutes = require('./routes/accounting');
 const notificationRoutes = require('./routes/notification');
 
 // Middleware to fetch exhibition details for all routes
@@ -99,6 +100,7 @@ app.use('/report', isAuthenticated, reportRoutes);
 app.use('/staff', isAuthenticated, staffRoutes);
 app.use('/users', isAuthenticated, userRoutes);
 app.use('/notification', isAuthenticated, notificationRoutes);
+app.use('/accounting', isAuthenticated, accountingRoutes);
 
 // Dashboard route
 app.get('/dashboard', isAuthenticated, async (req, res) => {
@@ -187,6 +189,11 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
     }, {});
 
     // --- Process Financial Summary ---
+    const formatCurrency = (num) => {
+      if (typeof num !== 'number') return '0.00';
+      return num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+
     const financials = {
       rent: {
         charged: rentStats?.charged || 0,
@@ -205,7 +212,12 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
         paid: paymentStats?.paid_shed || 0
       }
     };
-    Object.values(financials).forEach(cat => cat.due = cat.charged - cat.paid);
+    Object.values(financials).forEach(cat => {
+      cat.due = cat.charged - cat.paid;
+      cat.chargedFormatted = formatCurrency(cat.charged);
+      cat.paidFormatted = formatCurrency(cat.paid);
+      cat.dueFormatted = formatCurrency(cat.due);
+    });
 
     res.render('dashboard', {
       title: 'Dashboard',
