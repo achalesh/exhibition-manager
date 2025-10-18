@@ -12,6 +12,11 @@
     display: none !important;
   }
 
+  /* Set a consistent font size for printing */
+  body {
+    font-size: 12px !important;
+  }
+
   /* Ensure the main content takes up the full width */
   body, .container, .container-fluid {
     width: 100% !important;
@@ -24,5 +29,19 @@
   .card {
     box-shadow: none !important;
     border: 1px solid #dee2e6 !important;
+  }
+
+  /* Ensure table header and footer repeat on each printed page */
+  thead {
+    display: table-header-group !important;
+  }
+
+  tfoot {
+    display: table-footer-group !important;
+  }
+
+  /* Hide print-only elements from the screen */
+  .print-only {
+    display: none;
   }
 }

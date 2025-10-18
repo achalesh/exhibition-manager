@@ -1,12 +1,12 @@
 <%- include('partials/header') %>
 
 <div class="container-fluid">
-  <div class="d-flex align-items-center justify-content-between mb-4">
+  <div class="d-flex align-items-center justify-content-between mb-4 no-print">
     <h1 class="h3 mb-0"><%= title %></h1>
   </div>
 
   <!-- Financial Summary -->
-  <div class="row">
+  <div class="row no-print">
     <div class="col-xl-4 col-md-6 mb-4">
       <div class="card border-success shadow h-100 py-2">
         <div class="card-body">
@@ -177,6 +177,25 @@
               </tr>
             <% }) %>
           </tbody>
+          <tfoot class="print-only">
+            <tr>
+              <td colspan="4" class="text-end fw-bold pt-3">Total Income</td>
+              <td class="text-end fw-bold pt-3 text-success">
+                <%= summary.total_income.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %>
+              </td>
+              <td class="pt-3"></td>
+            </tr>
+            <tr>
+              <td colspan="4" class="text-end fw-bold">Total Expenditure</td>
+              <td class="text-end fw-bold text-danger"><%= summary.total_expenditure.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+              <td></td>
+            </tr>
+            <tr class="border-top">
+              <td colspan="4" class="text-end fw-bold">Net Balance</td>
+              <td class="text-end fw-bold"><%= summary.balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+              <td></td>
+            </tr>
+          </tfoot>
         </table>
       </div>
 
@@ -194,7 +213,17 @@
                 Previous
               </a>
             </li>
-            <li class="page-item disabled"><span class="page-link">Page <%= pagination.currentPage %> of <%= pagination.totalPages %></span></li>
+            <% pageNumbers.forEach(page => { %>
+              <% if (page === '...') { %>
+                <li class="page-item disabled"><span class="page-link">...</span></li>
+              <% } else { %>
+                <li class="page-item <%= page === pagination.currentPage ? 'active' : '' %>">
+                  <a class="page-link" href="?page=<%= page %>&start_date=<%= filters.start_date %>&end_date=<%= filters.end_date %>&type=<%= filters.type %>&q=<%= filters.q %>">
+                    <%= page %>
+                  </a>
+                </li>
+              <% } %>
+            <% }) %>
             <li class="page-item <%= !pagination.hasNextPage ? 'disabled' : '' %>">
               <a class="page-link" href="?page=<%= pagination.currentPage + 1 %>&start_date=<%= filters.start_date %>&end_date=<%= filters.end_date %>&type=<%= filters.type %>&q=<%= filters.q %>">
                 Next
