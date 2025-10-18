@@ -76,4 +76,19 @@ router.post('/materials', async (req, res) => {
   res.redirect('/material/issue');
 });
 
+// GET /settings/backup-db - Download a backup of the database
+router.get('/backup-db', (req, res) => {
+  // Ensure only admins can download the backup
+  if (!req.session.user || req.session.user.role !== 'admin') {
+    return res.status(403).send('Access Denied. Only administrators can perform backups.');
+  }
+
+  const dbPath = path.join(__dirname, '..', 'production.db');
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupFilename = `exhibition-backup-${timestamp}.db`;
+
+  res.download(dbPath, backupFilename);
+});
+
+
 module.exports = router;
