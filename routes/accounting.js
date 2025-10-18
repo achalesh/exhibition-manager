@@ -41,9 +41,10 @@ router.get('/', async (req, res) => {
     const total_income = summaryResult.total_income || 0;
     const total_expenditure = summaryResult.total_expenditure || 0;
 
+    const currentPage = parseInt(page);
     const pageSize = 25;
     const totalPages = Math.ceil(totalTransactions / pageSize);
-    const offset = (page - 1) * pageSize;
+    const offset = (currentPage - 1) * pageSize;
 
     // Get transactions for the current page
     const pagedSql = sql + ' ORDER BY a.transaction_date DESC, a.created_at DESC LIMIT ? OFFSET ?';
@@ -51,11 +52,32 @@ router.get('/', async (req, res) => {
     
     const balance = total_income - total_expenditure;
 
+    // --- Pagination Number Generation ---
+    const pageNumbers = [];
+    const pageRange = 2; // How many pages to show on each side of the current page
+    if (totalPages > 1) {
+      for (let i = 1; i <= totalPages; i++) {
+        // Always show the first page, the last page, the current page, and pages within the range
+        if (
+          i === 1 ||
+          i === totalPages ||
+          i === currentPage ||
+          (i >= currentPage - pageRange && i <= currentPage + pageRange)
+        ) {
+          if (pageNumbers.length > 0 && i - pageNumbers[pageNumbers.length - 1] > 1) {
+            pageNumbers.push('...'); // Add ellipsis if there's a gap
+          }
+          pageNumbers.push(i);
+        }
+      }
+    }
+
     res.render('accounting', {
       title: 'Income & Expenditure',
       transactions,
+      pageNumbers,
       pagination: {
-        currentPage: parseInt(page),
+        currentPage,
         totalPages,
         pageSize,
         totalTransactions,
