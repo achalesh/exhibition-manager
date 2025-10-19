@@ -1,0 +1,70 @@
+<%- include('partials/header') %>
+
+<div class="container-fluid">
+  <%- include('partials/ticketingNav') %>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-3">
+      <h6 class="m-0 fw-bold text-primary">Import Past Sales Data</h6>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">Use this form to enter historical sales data that was not tracked with the detailed distribution workflow. This will create a settled record directly.</p>
+      <form action="/ticketing/import" method="POST">
+        <div class="row g-3 align-items-end">
+          <div class="col-md-3">
+            <label for="settlement_date" class="form-label">Sale Date</label>
+            <input type="date" class="form-control" id="settlement_date" name="settlement_date" value="<%= new Date().toISOString().split('T')[0] %>" required>
+          </div>
+          <div class="col-md-3">
+            <label for="rate_id" class="form-label">Ticket Rate</label>
+            <select id="rate_id" name="rate_id" class="form-select" required>
+              <option value="" disabled selected>Select Rate...</option>
+              <% rates.forEach(rate => { %>
+                <option value="<%= rate.id %>" data-rate="<%= rate.rate %>">₹<%= rate.rate %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label for="tickets_sold" class="form-label">Number of Tickets Sold</label>
+            <input type="number" class="form-control" id="tickets_sold" name="tickets_sold" required min="1">
+          </div>
+        </div>
+        <div class="row g-3 align-items-end mt-2">
+          <div class="col-md-3">
+            <label for="upi_amount" class="form-label">UPI Amount Received</label>
+            <input type="number" step="0.01" class="form-control" id="upi_amount" name="upi_amount" value="0" min="0">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Cash Amount</label>
+            <input type="text" class="form-control" id="cash_amount_display" readonly>
+          </div>
+          <div class="col-md-3">
+            <button type="submit" class="btn btn-danger w-100">Import Sale</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const rateSelect = document.getElementById('rate_id');
+    const ticketsSoldInput = document.getElementById('tickets_sold');
+    const upiInput = document.getElementById('upi_amount');
+    const cashDisplay = document.getElementById('cash_amount_display');
+
+    function calculateRevenue() {
+      const selectedRate = parseFloat(rateSelect.options[rateSelect.selectedIndex]?.dataset.rate) || 0;
+      const ticketsSold = parseInt(ticketsSoldInput.value) || 0;
+      const totalRevenue = selectedRate * ticketsSold;
+      const upiAmount = parseFloat(upiInput.value) || 0;
+      const cashAmount = totalRevenue - upiAmount;
+      cashDisplay.value = '₹' + cashAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    [rateSelect, ticketsSoldInput, upiInput].forEach(el => el.addEventListener('input', calculateRevenue));
+  });
+</script>
+
+<%- include('partials/footer') %>

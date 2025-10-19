@@ -409,6 +409,146 @@ async function setupDatabase() {
       await new Promise((resolve, reject) => stmt.finalize(err => err ? reject(err) : resolve()));
       console.log('Electric items populated.');
 
+      // --- Event Session Table ---
+      console.log('Creating event_sessions table...');
+      await run(`CREATE TABLE IF NOT EXISTS event_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        location TEXT,
+        start_date DATE,
+        end_date DATE,
+        is_active INTEGER DEFAULT 0,
+        address TEXT,
+        place TEXT,
+        logo_path TEXT
+      )`);
+      await run(`ALTER TABLE event_sessions ADD COLUMN address TEXT`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
+      await run(`ALTER TABLE event_sessions ADD COLUMN place TEXT`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
+      await run(`ALTER TABLE event_sessions ADD COLUMN logo_path TEXT`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
+
+      // Create a default session if none exists and make it active
+      const existingSession = await get('SELECT id FROM event_sessions LIMIT 1');
+      if (!existingSession) {
+        // On first run, migrate data from the old exhibition_details table
+        const oldDetails = await get('SELECT * FROM exhibition_details WHERE id = 1');
+        await run(
+          `INSERT INTO event_sessions (name, location, address, place, logo_path, is_active) VALUES (?, ?, ?, ?, ?, ?)`,
+          [oldDetails?.name || 'Initial Session', oldDetails?.location || 'Default Location', oldDetails?.address, oldDetails?.place, oldDetails?.logo_path, 1]
+        );
+        console.log('Migrated old exhibition_details to new event_sessions table.');
+      }
+
+      // --- Ticketing System Tables ---
+      console.log('Creating ticketing system tables...');
+      // Table for the two fixed base rates
+      await run(`CREATE TABLE IF NOT EXISTS base_rates (
+        id INTEGER PRIMARY KEY,
+        rate REAL NOT NULL UNIQUE
+      )`);
+      await run(`INSERT OR IGNORE INTO base_rates (id, rate) VALUES (1, 100)`);
+      await run(`INSERT OR IGNORE INTO base_rates (id, rate) VALUES (2, 50)`);
+
+      // Table to store user-defined rides, linked to a base rate
+      await run(`CREATE TABLE IF NOT EXISTS ticket_rates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        base_rate_id INTEGER NOT NULL,
+        is_active INTEGER DEFAULT 1,
+        FOREIGN KEY (base_rate_id) REFERENCES base_rates(id)
+      )`);
+      // Migration for old 'rate' column in ticket_rates
+      try {
+        await run(`ALTER TABLE ticket_rates ADD COLUMN base_rate_id INTEGER`);
+        await run(`UPDATE ticket_rates SET base_rate_id = CASE WHEN rate = 100 THEN 1 WHEN rate = 50 THEN 2 ELSE NULL END`);
+      } catch (e) {
+        if (!e.message.includes('duplicate')) throw e;
+      }
+
+      // Table to track physical ticket stock
+      await run(`CREATE TABLE IF NOT EXISTS ticket_stock (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        base_rate_id INTEGER,
+        start_number INTEGER NOT NULL,
+        end_number INTEGER NOT NULL,
+        color TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        status TEXT DEFAULT 'Available',
+        FOREIGN KEY (base_rate_id) REFERENCES base_rates(id)
+      )`);
+      // Migration for ticket_stock table to handle schema change from rate_id to base_rate_id
+      try {
+        await run('ALTER TABLE ticket_stock RENAME TO ticket_stock_old');
+        await run(`CREATE TABLE ticket_stock (id INTEGER PRIMARY KEY AUTOINCREMENT, base_rate_id INTEGER, start_number INTEGER NOT NULL, end_number INTEGER NOT NULL, color TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, status TEXT DEFAULT 'Available', FOREIGN KEY (base_rate_id) REFERENCES base_rates(id))`);
+        await run(`INSERT INTO ticket_stock (id, base_rate_id, start_number, end_number, color, created_at, status) SELECT id, rate_id, start_number, end_number, color, created_at, status FROM ticket_stock_old`);
+        await run('DROP TABLE ticket_stock_old');
+        console.log('ticket_stock table migrated successfully.');
+      } catch (e) {
+        if (!e.message.includes('no such table: ticket_stock_old')) console.log('Skipping ticket_stock migration as it seems up-to-date.');
+      }
+
+      // Table to log daily sales
+      await run(`CREATE TABLE IF NOT EXISTS ticket_sales (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sale_date DATE NOT NULL,
+        details TEXT NOT NULL, -- JSON object of { rate_id: count, ... }
+        total_revenue REAL NOT NULL,
+        user_id INTEGER NOT NULL
+      )`);
+      console.log('Ticketing tables created.');
+
+      // Table for detailed ticket distribution and settlement
+      await run(`CREATE TABLE IF NOT EXISTS ticket_distributions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        distribution_date DATE NOT NULL,
+        staff_id INTEGER NOT NULL,
+        stock_id INTEGER,
+        rate_id INTEGER NOT NULL,
+        distributed_start_number INTEGER NOT NULL,
+        distributed_end_number INTEGER NOT NULL,
+        returned_start_number INTEGER,
+        returned_end_number INTEGER,
+        settlement_date DATE,
+        tickets_sold INTEGER,
+        calculated_revenue REAL,
+        upi_amount REAL,
+        cash_amount REAL,
+        status TEXT DEFAULT 'Distributed',
+        settled_by_user_id INTEGER,
+        FOREIGN KEY (staff_id) REFERENCES booking_staff(id),
+        FOREIGN KEY (rate_id) REFERENCES ticket_rates(id),
+        FOREIGN KEY (stock_id) REFERENCES ticket_stock(id)
+      )`);
+      await run(`ALTER TABLE ticket_distributions ADD COLUMN stock_id INTEGER`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
+      await run(`ALTER TABLE ticket_distributions ADD COLUMN upi_amount REAL`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
+      await run(`ALTER TABLE ticket_distributions ADD COLUMN cash_amount REAL`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
+
+      // --- Add event_session_id to all operational tables ---
+      console.log('Adding event_session_id to operational tables...');
+      const tablesToUpdate = [
+        'bookings', 'payments', 'material_issues', 'electric_bills', 'shed_bills', 'booking_staff',
+        'shed_allocations', 'accounting_transactions', 'ticket_stock', 'ticket_distributions',
+        'logs'
+      ];
+      for (const table of tablesToUpdate) {
+        await run(`ALTER TABLE ${table} ADD COLUMN event_session_id INTEGER REFERENCES event_sessions(id)`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
+      }
+
+      // --- One-time data migration to the default session ---
+      console.log('Migrating existing data to the default event session...');
+      const defaultSession = await get('SELECT id FROM event_sessions WHERE is_active = 1');
+      if (defaultSession) {
+        for (const table of tablesToUpdate) {
+          await run(`UPDATE ${table} SET event_session_id = ? WHERE event_session_id IS NULL`, [defaultSession.id]);
+        }
+      }
+
+      // --- App Meta Table for settings ---
+      await run(`CREATE TABLE IF NOT EXISTS app_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      )`);
+      await run(`INSERT OR IGNORE INTO app_meta (key, value) VALUES ('last_backup_date', '2000-01-01')`);
+
     } catch (err) {
       console.error('Error during database setup:', err.message);
     } finally {

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { db, all, get, run } = require('../db-helpers');
+const { all, get, run, transaction } = require('../db-helpers'); // Assuming transaction helper is added
 
 // GET: Show the form to add various charges
 router.get('/add', async (req, res) => {
@@ -65,6 +65,12 @@ router.get('/details/:booking_id', async (req, res) => {
 router.post('/add', async (req, res) => {
   const { booking_id, receipt_number, payment_date, payment_type, cash_paid, upi_paid } = req.body;
 
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    req.session.flash = { type: 'warning', message: 'Cannot add payments to an archived session.' };
+    // Redirect back to the form, preserving the selected booking if possible
+    return res.redirect(`/charges/add${booking_id ? '?booking_id=' + booking_id : ''}`);
+  }
+
   if (!booking_id) {
     return res.status(400).send('Booking is required.');
   }
@@ -86,45 +92,35 @@ router.post('/add', async (req, res) => {
     return res.status(400).send('Invalid payment type specified.');
   }
 
-  db.serialize(async () => {
-    try {
-      db.run('BEGIN TRANSACTION');
-      // 1. Insert the detailed payment record
-      const paymentSql = `INSERT INTO payments (booking_id, receipt_number, payment_date, payment_mode, cash_paid, upi_paid, ${targetCol}) VALUES (?, ?, ?, ?, ?, ?, ?)`;
-      const { lastID: paymentId } = await run(paymentSql, [booking_id, receipt_number, payment_date, payment_mode, cashAmount, upiAmount, totalPaid]);
+  try {
+    // The transaction helper would automatically handle BEGIN, COMMIT, and ROLLBACK
+    await transaction(async (db) => { // The helper passes a DB object to run queries on
+        // 1. Insert the detailed payment record
+        const paymentSql = `INSERT INTO payments (booking_id, receipt_number, payment_date, payment_mode, cash_paid, upi_paid, ${targetCol}) VALUES (?, ?, ?, ?, ?, ?, ?)`;
+        const { lastID: paymentId } = await db.run(paymentSql, [booking_id, receipt_number, payment_date, payment_mode, cashAmount, upiAmount, totalPaid]);
 
-      // 2. Update the master due_amount on the bookings table
-      await run('UPDATE bookings SET due_amount = due_amount - ? WHERE id = ?', [totalPaid, booking_id]);
+        // 2. Update the master due_amount on the bookings table
+        await db.run('UPDATE bookings SET due_amount = due_amount - ? WHERE id = ?', [totalPaid, booking_id]);
 
-      // 3. Add to accounting ledger as income
-      const booking = await get('SELECT exhibitor_name FROM bookings WHERE id = ?', [booking_id]);
-      let accountingCategory = 'Booking Payment'; // Default
-      let accountingDescription = `Payment from ${booking.exhibitor_name}`;
-
-      if (payment_type === 'rent') {
-        accountingCategory = 'Rent Payment';
-      } else if (payment_type === 'electric') {
-        accountingCategory = 'Electric Bill Payment';
-      } else if (payment_type === 'material') {
-        accountingCategory = 'Material Issue Payment';
-      } else if (payment_type === 'shed') {
-        accountingCategory = 'Shed Rent Payment';
-      }
-
-      const accountingSql = `INSERT INTO accounting_transactions (payment_id, transaction_type, category, description, amount, transaction_date, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)`;
-      await run(accountingSql, [paymentId, 'income', accountingCategory, accountingDescription, totalPaid, payment_date, req.session.user.id]);
-
-
-      db.run('COMMIT');
-      // Redirect back to the page with the same exhibitor selected
-      res.redirect(`/charges/add?booking_id=${booking_id}`);
-
-    } catch (err) {
-      db.run('ROLLBACK');
-      console.error(`Error processing payment for booking ${booking_id}:`, err.message);
-      res.status(500).send('Failed to process payment.');
-    }
-  });
+        // 3. Add to accounting ledger as income
+        const booking = await db.get('SELECT exhibitor_name FROM bookings WHERE id = ?', [booking_id]);
+        const categories = {
+            rent: 'Rent Payment',
+            electric: 'Electric Bill Payment',
+            material: 'Material Issue Payment',
+            shed: 'Shed Rent Payment'
+        };
+        const accountingCategory = categories[payment_type] || 'Booking Payment';
+        const accountingDescription = `Payment from ${booking.exhibitor_name}`;
+        const accountingSql = `INSERT INTO accounting_transactions (payment_id, transaction_type, category, description, amount, transaction_date, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)`;
+        await db.run(accountingSql, [paymentId, 'income', accountingCategory, accountingDescription, totalPaid, payment_date, req.session.user.id]);
+    });
+    // Redirect back to the page with the same exhibitor selected
+    res.redirect(`/charges/add?booking_id=${booking_id}`);
+  } catch (err) {
+    console.error(`Error processing payment for booking ${booking_id}:`, err.message);
+    res.status(500).send('Failed to process payment.');
+  }
 });
 
 // GET: Show form to edit a payment
@@ -165,6 +161,12 @@ router.post('/edit/:id', async (req, res) => {
   const paymentId = req.params.id;
   const { receipt_number, payment_date, amount_paid } = req.body;
   const newAmount = parseFloat(amount_paid) || 0;
+
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    const payment = await get('SELECT booking_id FROM payments WHERE id = ?', [paymentId]);
+    req.session.flash = { type: 'warning', message: 'Cannot edit payments in an archived session.' };
+    return res.redirect(`/booking/details-full/${payment.booking_id}`);
+  }
 
   if (newAmount <= 0) {
     return res.status(400).send('Payment amount must be greater than zero.');
@@ -213,6 +215,13 @@ router.post('/edit/:id', async (req, res) => {
 // POST: Delete a payment
 router.post('/delete/:id', async (req, res) => {
   const paymentId = req.params.id;
+
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    const payment = await get('SELECT booking_id FROM payments WHERE id = ?', [paymentId]);
+    req.session.flash = { type: 'warning', message: 'Cannot delete payments from an archived session.' };
+    return res.redirect(`/booking/details-full/${payment.booking_id}`);
+  }
+
   db.serialize(async () => {
     try {
       db.run('BEGIN TRANSACTION');

@@ -52,6 +52,11 @@ router.get('/add', async (req, res) => {
 router.post('/add', async (req, res) => {
   const { sl_no, booking_id, items, total_amount, remarks } = req.body;
 
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    req.session.flash = { type: 'warning', message: 'Cannot add electric bills to an archived session.' };
+    return res.redirect(`/electric/add${booking_id ? '?booking_id=' + booking_id : ''}`);
+  }
+
   if (!booking_id || !items || !total_amount) {
     return res.status(400).send('Missing required fields: Exhibitor, Items, and Total are required.');
   }
@@ -115,6 +120,11 @@ router.post('/edit/:id', async (req, res) => {
   const billId = req.params.id;
   const { sl_no, booking_id, items, total_amount, remarks } = req.body;
 
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    req.session.flash = { type: 'warning', message: 'Cannot edit data in an archived session.' };
+    return res.redirect(`/booking/details-full/${booking_id}`);
+  }
+
   if (req.session.user && req.session.user.role === 'admin') {
     db.serialize(async () => {
       try {
@@ -151,6 +161,12 @@ router.post('/edit/:id', async (req, res) => {
 // POST: Delete an electric bill
 router.post('/delete/:id', async (req, res) => {
   const billId = req.params.id;
+
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    const bill = await get('SELECT booking_id FROM electric_bills WHERE id = ?', [billId]);
+    req.session.flash = { type: 'warning', message: 'Cannot delete data from an archived session.' };
+    return res.redirect(`/booking/details-full/${bill.booking_id}`);
+  }
 
   db.serialize(async () => {
     try {

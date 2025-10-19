@@ -1,0 +1,54 @@
+<%- include('partials/header') %>
+
+<% 
+  // Determine if the form should be read-only.
+  // This session can't be edited if it's not the currently active one.
+  // We add this check as a safeguard, though the main "Edit" button for the active session is usually hidden.
+  const isReadOnly = session.id !== activeSession.id;
+%>
+
+<div class="container-fluid">
+  <h1 class="h3 mb-4 text-gray-800"><%= title %></h1>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-3">
+      <h6 class="m-0 fw-bold text-primary">Update Session Details</h6>
+    </div>
+    <div class="card-body">
+      <form action="/sessions/edit/<%= session.id %>" method="POST">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="name" class="form-label">Session Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="name" name="name" value="<%= session.name %>" required <%- isReadOnly ? 'readonly' : '' %>>
+          </div>
+          <div class="col-md-6">
+            <label for="location" class="form-label">Location</label>
+            <input type="text" class="form-control" id="location" name="location" value="<%= session.location || '' %>" <%- isReadOnly ? 'readonly' : '' %>>
+          </div>
+          <div class="col-md-6">
+            <label for="address" class="form-label">Address</label>
+            <input type="text" class="form-control" id="address" name="address" value="<%= session.address || '' %>" <%- isReadOnly ? 'readonly' : '' %>>
+          </div>
+          <div class="col-md-6">
+            <label for="place" class="form-label">Place / City</label>
+            <input type="text" class="form-control" id="place" name="place" value="<%= session.place || '' %>" <%- isReadOnly ? 'readonly' : '' %>>
+          </div>
+          <div class="col-md-6">
+            <label for="start_date" class="form-label">Start Date</label>
+            <input type="date" class="form-control" id="start_date" name="start_date" value="<%= session.start_date || '' %>" <%- isReadOnly ? 'readonly' : '' %>>
+          </div>
+          <div class="col-md-6">
+            <label for="end_date" class="form-label">End Date</label>
+            <input type="date" class="form-control" id="end_date" name="end_date" value="<%= session.end_date || '' %>" <%- isReadOnly ? 'readonly' : '' %>>
+          </div>
+        </div>
+        <% if (!isReadOnly) { %>
+          <button type="submit" class="btn btn-primary mt-3">Update Session</button>
+        <% } %>
+        <a href="/sessions" class="btn btn-secondary mt-3">Cancel</a>
+      </form>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

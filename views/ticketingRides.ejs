@@ -1,0 +1,49 @@
+<%- include('partials/header') %>
+
+<div class="container-fluid">
+  <%- include('partials/ticketingNav') %>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-3">
+      <h6 class="m-0 fw-bold text-primary">Add New Ride</h6>
+    </div>
+    <div class="card-body">
+      <form action="/ticketing/rides/add" method="POST" class="row g-3 align-items-end mb-4">
+        <div class="col">
+          <label for="ride_name" class="form-label">Ride Name (e.g., Ferris Wheel)</label>
+          <input type="text" class="form-control" id="ride_name" name="name" required>
+        </div>
+        <div class="col">
+          <label for="ride_rate" class="form-label">Rate (₹)</label>
+          <select id="ride_rate" name="rate" class="form-select" required>
+            <option value="" disabled selected>Choose rate...</option>
+            <% baseRates.forEach(rate => { %>
+              <option value="<%= rate.id %>"><%= rate.rate %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="col-auto">
+          <button type="submit" class="btn btn-success">Add Ride</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header py-3"><h6 class="m-0 fw-bold text-primary">Existing Rides</h6></div>
+    <div class="card-body">
+      <ul class="list-group">
+        <% rides.forEach(ride => { %>
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <%= ride.name %> - <span class="fw-bold">₹<%= ride.rate %></span>
+            <form action="/ticketing/rides/delete/<%= ride.id %>" method="POST" onsubmit="return confirm('Are you sure? This cannot be undone.')">
+              <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+            </form>
+          </li>
+        <% }) %>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

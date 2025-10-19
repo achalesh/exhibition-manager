@@ -1,0 +1,277 @@
+<%- include('partials/header') %>
+
+<div class="container-fluid">
+  <div class="no-print">
+    <%- include('partials/ticketingNav') %>
+  </div>
+
+  <div class="row no-print">
+    <!-- Summary Cards -->
+    <div class="col-lg-7">
+      <div class="row">
+        <div class="col-md-6 mb-4">
+          <div class="card border-left-success shadow h-100 py-2">
+            <div class="card-body">
+              <div class="row no-gutters align-items-center">
+                <div class="col mr-2">
+                  <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Available</div>
+                  <div class="h5 mb-0 font-weight-bold text-gray-800"><%= summaryCounts.Available %></div>
+                </div>
+                <div class="col-auto"><i class="bi bi-stack fs-2 text-secondary"></i></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6 mb-4">
+          <div class="card border-left-warning shadow h-100 py-2">
+            <div class="card-body">
+              <div class="row no-gutters align-items-center">
+                <div class="col mr-2">
+                  <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Distributed</div>
+                  <div class="h5 mb-0 font-weight-bold text-gray-800"><%= summaryCounts.Distributed %></div>
+                </div>
+                <div class="col-auto"><i class="bi bi-truck fs-2 text-secondary"></i></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6 mb-4">
+          <div class="card border-left-info shadow h-100 py-2">
+            <div class="card-body">
+              <div class="row no-gutters align-items-center">
+                <div class="col mr-2">
+                  <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Settled / Used</div>
+                  <div class="h5 mb-0 font-weight-bold text-gray-800"><%= summaryCounts.Settled %></div>
+                </div>
+                <div class="col-auto"><i class="bi bi-check2-circle fs-2 text-secondary"></i></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6 mb-4">
+          <div class="card border-left-danger shadow h-100 py-2">
+            <div class="card-body">
+              <div class="row no-gutters align-items-center">
+                <div class="col mr-2">
+                  <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Cancelled</div>
+                  <div class="h5 mb-0 font-weight-bold text-gray-800"><%= summaryCounts.Cancelled %></div>
+                </div>
+                <div class="col-auto"><i class="bi bi-x-circle fs-2 text-secondary"></i></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Chart -->
+    <div class="col-lg-5 no-print">
+      <div class="card shadow-sm mb-4">
+        <div class="card-header py-3"><h6 class="m-0 fw-bold text-primary">Stock Status Distribution</h6></div>
+        <div class="card-body">
+          <canvas id="stockStatusChart" style="max-height: 250px;"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Print Button -->
+  <div class="mb-4 no-print">
+    <button onclick="window.print()" class="btn btn-secondary"><i class="bi bi-printer-fill me-2"></i>Print Report</button>
+  </div>
+
+  <!-- Filter Form -->
+  <div class="card shadow-sm mb-4 no-print">
+    <div class="card-header py-3">
+      <h6 class="m-0 fw-bold text-primary">Filter Stock</h6>
+    </div>
+    <div class="card-body">
+      <form action="/ticketing/report/stock" method="GET" class="row g-3 align-items-end">
+        <div class="col-md-4">
+          <label for="status" class="form-label">Status</label>
+          <select id="status" name="status" class="form-select">
+            <option value="all" <%= filters.status === 'all' ? 'selected' : '' %>>All Statuses</option>
+            <option value="Available" <%= filters.status === 'Available' ? 'selected' : '' %>>Available</option>
+            <option value="Distributed" <%= filters.status === 'Distributed' ? 'selected' : '' %>>Distributed</option>
+            <option value="Settled" <%= filters.status === 'Settled' ? 'selected' : '' %>>Settled</option>
+            <option value="Cancelled" <%= filters.status === 'Cancelled' ? 'selected' : '' %>>Cancelled</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label for="rate" class="form-label">Rate</label>
+          <select id="rate" name="rate" class="form-select">
+            <option value="all" <%= filters.rate === 'all' ? 'selected' : '' %>>All Rates</option>
+            <% allRates.forEach(r => { %>
+              <option value="<%= r.rate %>" <%= filters.rate == r.rate ? 'selected' : '' %>>₹<%= r.rate %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-primary w-100">Filter</button>
+        </div>
+        <div class="col-md-2">
+          <a href="/ticketing/report/stock" class="btn btn-secondary w-100">Clear</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-3">
+      <h6 class="m-0 fw-bold text-primary">Stock Status Summary</h6>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-bordered" id="dataTable">
+          <thead class="table-light">
+            <tr>
+              <th>Rate (₹)</th>
+              <th>Color</th>
+              <th>Serial Range</th>
+              <th>Status</th>
+              <th>Distributed To</th>
+              <th>Date Added</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% stock.forEach(item => { %>
+              <tr>
+                <td><%= item.rate %></td>
+                <td><span class="badge" style="background-color: <%= item.color ? item.color.toLowerCase() : 'grey' %>;"><%= item.color %></span></td>
+                <td><%= item.start_number %> - <%= item.end_number %></td>
+                <td>
+                  <span class="badge bg-<%= item.status === 'Available' ? 'success' : (item.status === 'Distributed' ? 'warning' : 'secondary') %>">
+                    <%= item.status %>
+                  </span>
+                </td>
+                <td><%= item.staff_name || '---' %></td>
+                <td><%= new Date(item.created_at).toLocaleDateString() %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination Controls -->
+      <% if (pagination && pagination.totalPages > 1) { %>
+        <nav aria-label="Page navigation">
+          <ul class="pagination justify-content-center mt-4">
+      
+            <!-- Previous Page Link -->
+            <li class="page-item <%= (pagination.currentPage === 1) ? 'disabled' : '' %>">
+              <a class="page-link" href="/ticketing/report/stock?status=<%= filters.status %>&rate=<%= filters.rate %>&page=<%= pagination.currentPage - 1 %>" aria-label="Previous">
+                <span aria-hidden="true">&laquo;</span>
+                <span class="sr-only">Previous</span>
+              </a>
+            </li>
+      
+            <%# 
+              Logic to display a limited number of page links.
+              This prevents the pagination bar from becoming too long on sites with many pages.
+              It shows a few pages around the current page, with ellipses for gaps.
+            %>
+            <% 
+              const maxPagesToShow = 5; // Number of page links to show
+              let startPage, endPage;
+      
+              if (pagination.totalPages <= maxPagesToShow) {
+                // Show all pages if total is less than the max
+                startPage = 1;
+                endPage = pagination.totalPages;
+              } else {
+                // Calculate start and end pages for a sliding window
+                const maxPagesBeforeCurrent = Math.floor(maxPagesToShow / 2);
+                const maxPagesAfterCurrent = Math.ceil(maxPagesToShow / 2) - 1;
+                if (pagination.currentPage <= maxPagesBeforeCurrent) {
+                  // Near the beginning
+                  startPage = 1;
+                  endPage = maxPagesToShow;
+                } else if (pagination.currentPage + maxPagesAfterCurrent >= pagination.totalPages) {
+                  // Near the end
+                  startPage = pagination.totalPages - maxPagesToShow + 1;
+                  endPage = pagination.totalPages;
+                } else {
+                  // Somewhere in the middle
+                  startPage = pagination.currentPage - maxPagesBeforeCurrent;
+                  endPage = pagination.currentPage + maxPagesAfterCurrent;
+                }
+              }
+            %>
+      
+            <!-- First Page & Ellipsis -->
+            <% if (startPage > 1) { %>
+              <li class="page-item">
+                <a class="page-link" href="/ticketing/report/stock?status=<%= filters.status %>&rate=<%= filters.rate %>&page=1">1</a>
+              </li>
+              <% if (startPage > 2) { %>
+                <li class="page-item disabled"><span class="page-link">...</span></li>
+              <% } %>
+            <% } %>
+      
+            <!-- Page Number Links -->
+            <% for (let i = startPage; i <= endPage; i++) { %>
+              <li class="page-item <%= (i === pagination.currentPage) ? 'active' : '' %>">
+                <a class="page-link" href="/ticketing/report/stock?status=<%= filters.status %>&rate=<%= filters.rate %>&page=<%= i %>"><%= i %></a>
+              </li>
+            <% } %>
+      
+            <!-- Last Page & Ellipsis -->
+            <% if (endPage < pagination.totalPages) { %>
+              <% if (endPage < pagination.totalPages - 1) { %>
+                <li class="page-item disabled"><span class="page-link">...</span></li>
+              <% } %>
+              <li class="page-item">
+                <a class="page-link" href="/ticketing/report/stock?status=<%= filters.status %>&rate=<%= filters.rate %>&page=<%= pagination.totalPages %>"><%= pagination.totalPages %></a>
+              </li>
+            <% } %>
+      
+            <!-- Next Page Link -->
+            <li class="page-item <%= (pagination.currentPage === pagination.totalPages) ? 'disabled' : '' %>">
+              <a class="page-link" href="/ticketing/report/stock?status=<%= filters.status %>&rate=<%= filters.rate %>&page=<%= pagination.currentPage + 1 %>" aria-label="Next">
+                <span aria-hidden="true">&raquo;</span>
+                <span class="sr-only">Next</span>
+              </a>
+            </li>
+          </ul>
+        </nav>
+      <% } %>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const summaryData = <%- JSON.stringify(summaryCounts) %>;
+    const ctx = document.getElementById('stockStatusChart').getContext('2d');
+
+    new Chart(ctx, {
+      type: 'pie',
+      data: {
+        labels: ['Available', 'Distributed', 'Settled', 'Cancelled'],
+        datasets: [{
+          label: 'Stock Bundles',
+          data: [
+            summaryData.Available,
+            summaryData.Distributed,
+            summaryData.Settled,
+            summaryData.Cancelled
+          ],
+          backgroundColor: [
+            'rgba(25, 135, 84, 0.7)',  // Success (Available)
+            'rgba(255, 193, 7, 0.7)',   // Warning (Distributed)
+            'rgba(13, 202, 240, 0.7)',  // Info (Settled)
+            'rgba(220, 53, 69, 0.7)'    // Danger (Cancelled)
+          ],
+          borderColor: '#fff',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'top' } }
+      }
+    });
+  });
+</script>

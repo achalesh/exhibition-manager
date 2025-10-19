@@ -5,10 +5,21 @@ const { db, all, get, run } = require('../db-helpers');
 // GET: Show page to manage all sheds (add, edit, delete)
 router.get('/manage', async (req, res) => {
   try {
-    const sheds = await all('SELECT * FROM sheds ORDER BY name');
+    const viewingSessionId = res.locals.viewingSession.id;
+    // Fetch all sheds and join their allocation status for the current viewing session
+    const sheds = await all(`
+      SELECT 
+        s.*,
+        CASE WHEN sa.id IS NOT NULL THEN 'Allocated' ELSE 'Available' END as session_status
+      FROM sheds s
+      LEFT JOIN shed_allocations sa ON s.id = sa.shed_id AND sa.event_session_id = ?
+      ORDER BY s.name
+    `, [viewingSessionId]);
+
     res.render('manageSheds', {
       title: 'Manage Sheds',
       sheds: sheds || [],
+      viewingSession: res.locals.viewingSession,
       report_url: '/shed/manage' // For active nav link
     });
   } catch (err) {
@@ -20,6 +31,12 @@ router.get('/manage', async (req, res) => {
 // POST: Add a new shed
 router.post('/add', async (req, res) => {
   const { name, size, rent } = req.body;
+
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    req.session.flash = { type: 'warning', message: 'Cannot add sheds in an archived session.' };
+    return res.redirect('/shed/manage');
+  }
+
   if (!name || !rent) {
     return res.status(400).send('Shed Name and Rent are required.');
   }
@@ -35,12 +52,19 @@ router.post('/add', async (req, res) => {
 // GET: Show the form to allocate a shed
 router.get('/allocate', async (req, res) => {
   try {
+    const viewingSessionId = res.locals.viewingSession.id;
     // Fetch all current bookings and all available sheds in parallel
     const [bookings, sheds] = await Promise.all([
       all(`SELECT b.id, b.exhibitor_name, s.name as space_name 
            FROM bookings b JOIN spaces s ON b.space_id = s.id 
+           WHERE b.event_session_id = ?
            ORDER BY b.exhibitor_name`),
-      all("SELECT * FROM sheds WHERE status = 'Available' ORDER BY name")
+      // A shed is available if it's not in the shed_allocations table for the current viewing session
+      all(`
+        SELECT s.* FROM sheds s
+        WHERE s.id NOT IN (SELECT sa.shed_id FROM shed_allocations sa WHERE sa.event_session_id = ?)
+        ORDER BY s.name
+      `, [viewingSessionId])
     ]);
 
     res.render('allocateShed', {
@@ -57,6 +81,12 @@ router.get('/allocate', async (req, res) => {
 // POST: Process the shed allocation
 router.post('/allocate', async (req, res) => {
   const { booking_id, shed_id } = req.body;
+  const activeSessionId = res.locals.activeSession.id;
+
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    req.session.flash = { type: 'warning', message: 'Cannot allocate sheds in an archived session.' };
+    return res.redirect('/shed/allocate');
+  }
 
   if (!booking_id || !shed_id) {
     return res.status(400).send('Exhibitor and Shed must be selected.');
@@ -70,10 +100,7 @@ router.post('/allocate', async (req, res) => {
       if (!shed) throw new Error('Selected shed not found.');
 
       // 1. Create the allocation record
-      await run('INSERT INTO shed_allocations (booking_id, shed_id, allocation_date) VALUES (?, ?, date("now"))', [booking_id, shed_id]);
-
-      // 2. Update the shed's status to 'Allocated'
-      await run("UPDATE sheds SET status = 'Allocated' WHERE id = ?", [shed_id]);
+      await run('INSERT INTO shed_allocations (booking_id, shed_id, allocation_date, event_session_id) VALUES (?, ?, date("now"), ?)', [booking_id, shed_id, activeSessionId]);
 
       // 3. Add the shed rent to the booking's due amount
       await run('UPDATE bookings SET due_amount = due_amount + ? WHERE id = ?', [shed.rent, booking_id]);
@@ -92,6 +119,12 @@ router.post('/allocate', async (req, res) => {
 router.post('/edit/:id', async (req, res) => {
   const { name, size, rent } = req.body;
   const { id } = req.params;
+
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    req.session.flash = { type: 'warning', message: 'Cannot edit sheds in an archived session.' };
+    return res.redirect('/shed/manage');
+  }
+
   if (!name || !rent) {
     return res.status(400).send('Shed Name and Rent are required.');
   }
@@ -107,6 +140,12 @@ router.post('/edit/:id', async (req, res) => {
 // POST: Delete a shed
 router.post('/delete/:id', async (req, res) => {
   const { id } = req.params;
+
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    req.session.flash = { type: 'warning', message: 'Cannot delete sheds from an archived session.' };
+    return res.redirect('/shed/manage');
+  }
+
   try {
     // First, check if the shed is currently allocated.
     const allocation = await get('SELECT id FROM shed_allocations WHERE shed_id = ?', [id]);
@@ -126,6 +165,12 @@ router.post('/delete/:id', async (req, res) => {
 router.post('/allocation/delete/:id', async (req, res) => {
   const allocationId = req.params.id;
 
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    const allocation = await get('SELECT booking_id FROM shed_allocations WHERE id = ?', [allocationId]);
+    req.session.flash = { type: 'warning', message: 'Cannot de-allocate sheds from an archived session.' };
+    return res.redirect(`/booking/details-full/${allocation.booking_id}`);
+  }
+
   db.serialize(async () => {
     try {
       db.run('BEGIN TRANSACTION');
@@ -138,13 +183,7 @@ router.post('/allocation/delete/:id', async (req, res) => {
       const shed = await get('SELECT rent FROM sheds WHERE id = ?', [allocation.shed_id]);
       if (!shed) throw new Error('Associated shed not found.');
 
-      // 3. Update the booking's due amount
-      await run('UPDATE bookings SET due_amount = due_amount - ? WHERE id = ?', [shed.rent, allocation.booking_id]);
-
-      // 4. Update the shed's status back to 'Available'
-      await run("UPDATE sheds SET status = 'Available' WHERE id = ?", [allocation.shed_id]);
-
-      // 5. Delete the allocation record
+      // Delete the allocation record. We no longer touch the booking's due amount or the shed's static status.
       await run('DELETE FROM shed_allocations WHERE id = ?', [allocationId]);
 
       db.run('COMMIT');
@@ -160,10 +199,12 @@ router.post('/allocation/delete/:id', async (req, res) => {
 // GET: Show form to add a miscellaneous shed bill
 router.get('/bill', async (req, res) => {
   try {
+    const viewingSessionId = res.locals.viewingSession.id;
     const bookings = await all(`
       SELECT b.id, b.exhibitor_name, s.name as space_name 
       FROM bookings b
       JOIN spaces s ON b.space_id = s.id
+      WHERE b.event_session_id = ?
       ORDER BY b.exhibitor_name
     `);
     res.render('addShedBill', { title: 'Add Shed Bill', bookings });
@@ -176,6 +217,12 @@ router.get('/bill', async (req, res) => {
 // POST: Save a new shed bill
 router.post('/bill', async (req, res) => {
   const { booking_id, description, amount } = req.body;
+  const activeSessionId = res.locals.activeSession.id;
+
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    req.session.flash = { type: 'warning', message: 'Cannot add shed bills in an archived session.' };
+    return res.redirect('/shed/bill');
+  }
 
   if (!booking_id || !description || !amount) {
     return res.status(400).send('Exhibitor, Description, and Amount are required.');
@@ -190,8 +237,8 @@ router.post('/bill', async (req, res) => {
     try {
       db.run('BEGIN TRANSACTION');
       // 1. Insert the shed bill
-      const sql = `INSERT INTO shed_bills (booking_id, bill_date, description, amount) VALUES (?, date('now'), ?, ?)`;
-      await run(sql, [booking_id, description, billAmount]);
+      const sql = `INSERT INTO shed_bills (booking_id, bill_date, description, amount, event_session_id) VALUES (?, date('now'), ?, ?, ?)`;
+      await run(sql, [booking_id, description, billAmount, activeSessionId]);
 
       // 2. Update the master due_amount on the bookings table
       await run('UPDATE bookings SET due_amount = due_amount + ? WHERE id = ?', [billAmount, booking_id]);
@@ -233,6 +280,12 @@ router.post('/bill/edit/:id', async (req, res) => {
   const billId = req.params.id;
   const { booking_id, description, amount } = req.body;
   const newAmount = parseFloat(amount) || 0;
+
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    const bill = await get('SELECT booking_id FROM shed_bills WHERE id = ?', [billId]);
+    req.session.flash = { type: 'warning', message: 'Cannot edit shed bills in an archived session.' };
+    return res.redirect(`/booking/details-full/${bill.booking_id}`);
+  }
 
   if (!booking_id || !description || newAmount <= 0) {
     return res.status(400).send('All fields are required and amount must be positive.');
@@ -277,6 +330,12 @@ router.post('/bill/edit/:id', async (req, res) => {
 // POST: Delete a shed bill
 router.post('/bill/delete/:id', async (req, res) => {
   const billId = req.params.id;
+
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    const bill = await get('SELECT booking_id FROM shed_bills WHERE id = ?', [billId]);
+    req.session.flash = { type: 'warning', message: 'Cannot delete shed bills from an archived session.' };
+    return res.redirect(`/booking/details-full/${bill.booking_id}`);
+  }
 
   db.serialize(async () => {
     try {

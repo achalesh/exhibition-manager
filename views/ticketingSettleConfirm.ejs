@@ -1,0 +1,72 @@
+<%- include('partials/header') %>
+
+<div class="container-fluid">
+  <h1 class="h3 mb-4"><%= title %></h1>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-3">
+      <h6 class="m-0 fw-bold text-primary">Confirm Settlement</h6>
+    </div>
+    <div class="card-body">
+      <div class="row mb-4">
+        <div class="col-md-6">
+          <p><strong>Staff:</strong> <%= distribution.staff_name %></p>
+          <p><strong>Ticket:</strong> <%= distribution.rate_name %> (₹<%= distribution.rate %>)</p>
+          <p><strong>Distributed Range:</strong> <%= distribution.distributed_start_number %> - <%= distribution.distributed_end_number %></p>
+        </div>
+        <div class="col-md-6">
+          <p><strong>Returned Start No:</strong> <%= returned_start_number %></p>
+          <p><strong>Tickets Sold:</strong> <%= tickets_sold %></p>
+          <h5 class="fw-bold">Total Revenue: ₹<%= total_revenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></h5>
+        </div>
+      </div>
+
+      <hr>
+
+      <form action="/ticketing/settle/<%= distribution.id %>" method="POST">
+        <input type="hidden" name="returned_start_number" value="<%= returned_start_number %>">
+        <input type="hidden" id="total_revenue_hidden" value="<%= total_revenue %>">
+
+        <div class="row align-items-end">
+          <div class="col-md-4">
+            <label for="upi_amount" class="form-label">Amount Received via UPI</label>
+            <input type="number" step="0.01" class="form-control" id="upi_amount" name="upi_amount" value="0" min="0" max="<%= total_revenue %>">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Balance (Cash Amount)</label>
+            <input type="text" class="form-control" id="cash_amount_display" readonly>
+          </div>
+          <div class="col-md-4">
+            <button type="submit" class="btn btn-success w-100">Confirm & Finalize Settlement</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <a href="/ticketing/settle" class="btn btn-secondary">« Back to Unsettled List</a>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const upiInput = document.getElementById('upi_amount');
+    const cashDisplay = document.getElementById('cash_amount_display');
+    const totalRevenue = parseFloat(document.getElementById('total_revenue_hidden').value);
+
+    function updateCashAmount() {
+      const upiAmount = parseFloat(upiInput.value) || 0;
+      if (upiAmount > totalRevenue) {
+        upiInput.value = totalRevenue;
+      }
+      const cashAmount = totalRevenue - (parseFloat(upiInput.value) || 0);
+      cashDisplay.value = '₹' + cashAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    upiInput.addEventListener('input', updateCashAmount);
+
+    // Initial calculation
+    updateCashAmount();
+  });
+</script>
+
+<%- include('partials/footer') %>

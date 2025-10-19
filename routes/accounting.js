@@ -5,11 +5,12 @@ const { all, get, run } = require('../db-helpers');
 // GET /accounting - Main accounting page
 router.get('/', async (req, res) => {
   try {
+    const viewingSessionId = res.locals.viewingSession.id;
     const { start_date, end_date, type, q, page = 1 } = req.query;
 
     let sql = 'SELECT a.*, u.username FROM accounting_transactions a LEFT JOIN users u ON a.user_id = u.id';
-    const whereClauses = [];
-    const params = [];
+    const whereClauses = ['a.event_session_id = ?'];
+    const params = [viewingSessionId];
 
     if (start_date) {
       whereClauses.push('a.transaction_date >= ?');
@@ -105,16 +106,22 @@ router.get('/', async (req, res) => {
 // POST /accounting/add - Add a new transaction
 router.post('/add', async (req, res) => {
   const { transaction_type, category, description, amount, transaction_date } = req.body;
+
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    req.session.flash = { type: 'warning', message: 'Cannot add transactions to an archived session.' };
+    return res.redirect('/accounting');
+  }
+
+  const activeSessionId = res.locals.activeSession.id;
   const user_id = req.session.user.id;
 
   if (!transaction_type || !category || !amount || !transaction_date) {
     req.session.flash = { type: 'danger', message: 'Please fill in all required fields.' };
     return res.redirect('/accounting');
   }
-
   try {
-    const sql = `INSERT INTO accounting_transactions (transaction_type, category, description, amount, transaction_date, user_id) VALUES (?, ?, ?, ?, ?, ?)`;
-    await run(sql, [transaction_type, category, description, parseFloat(amount), transaction_date, user_id]);
+    const sql = `INSERT INTO accounting_transactions (transaction_type, category, description, amount, transaction_date, user_id, event_session_id) VALUES (?, ?, ?, ?, ?, ?, ?)`;
+    await run(sql, [transaction_type, category, description, parseFloat(amount), transaction_date, user_id, activeSessionId]);
     req.session.flash = { type: 'success', message: 'Transaction added successfully!' };
     res.redirect('/accounting');
   } catch (err) {
@@ -149,6 +156,11 @@ router.post('/edit/:id', async (req, res) => {
   const transactionId = req.params.id;
   const { transaction_type, category, description, amount, transaction_date } = req.body;
 
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    req.session.flash = { type: 'warning', message: 'Cannot edit transactions in an archived session.' };
+    return res.redirect('/accounting');
+  }
+
   if (!transaction_type || !category || !amount || !transaction_date) {
     req.session.flash = { type: 'danger', message: 'Please fill in all required fields.' };
     return res.redirect(`/accounting/edit/${transactionId}`);
@@ -177,6 +189,11 @@ router.post('/edit/:id', async (req, res) => {
 router.post('/delete/:id', async (req, res) => {
   const transactionId = req.params.id;
 
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    req.session.flash = { type: 'warning', message: 'Cannot delete transactions from an archived session.' };
+    return res.redirect('/accounting');
+  }
+
   try {
     // Security check: Prevent deletion of automated payment transactions
     const transaction = await get('SELECT category FROM accounting_transactions WHERE id = ?', [transactionId]);
@@ -203,6 +220,7 @@ router.post('/delete/:id', async (req, res) => {
 // GET /accounting/report/by-category - Show summary by category
 router.get('/report/by-category', async (req, res) => {
   try {
+    const viewingSessionId = res.locals.viewingSession.id;
     const { start_date, end_date } = req.query;
 
     let sql = `
@@ -212,8 +230,8 @@ router.get('/report/by-category', async (req, res) => {
         SUM(amount) as total_amount
       FROM accounting_transactions
     `;
-    const whereClauses = [];
-    const params = [];
+    const whereClauses = ['event_session_id = ?'];
+    const params = [viewingSessionId];
 
     if (start_date) {
       whereClauses.push('transaction_date >= ?');
@@ -261,6 +279,7 @@ router.get('/report/by-category', async (req, res) => {
 // GET /accounting/report/by-category/csv - Export summary by category to CSV
 router.get('/report/by-category/csv', async (req, res) => {
   try {
+    const viewingSessionId = res.locals.viewingSession.id;
     const { start_date, end_date } = req.query;
 
     let sql = `
@@ -270,8 +289,8 @@ router.get('/report/by-category/csv', async (req, res) => {
         SUM(amount) as total_amount
       FROM accounting_transactions
     `;
-    const whereClauses = [];
-    const params = [];
+    const whereClauses = ['event_session_id = ?'];
+    const params = [viewingSessionId];
 
     if (start_date) {
       whereClauses.push('transaction_date >= ?');
@@ -323,11 +342,12 @@ router.get('/report/by-category/csv', async (req, res) => {
 // GET /accounting/csv - Export transaction list to CSV
 router.get('/csv', async (req, res) => {
   try {
+    const viewingSessionId = res.locals.viewingSession.id;
     const { start_date, end_date, type, q } = req.query;
 
     let sql = 'SELECT a.transaction_date, a.transaction_type, a.category, a.description, a.amount, u.username FROM accounting_transactions a LEFT JOIN users u ON a.user_id = u.id';
-    const whereClauses = [];
-    const params = [];
+    const whereClauses = ['a.event_session_id = ?'];
+    const params = [viewingSessionId];
 
     if (start_date) {
       whereClauses.push('a.transaction_date >= ?');
