@@ -38,17 +38,19 @@
         <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
           <li class="nav-item"><a class="nav-link" href="/"><i class="bi bi-speedometer2 me-1"></i>Dashboard</a></li>
           <li class="nav-item"><a class="nav-link" href="/booking/list"><i class="bi bi-list-ul me-1"></i>View Bookings</a></li>
-          <li class="nav-item"><a class="nav-link" href="/booking/add"><i class="bi bi-plus-square me-1"></i>Book Space</a></li>
-          <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" id="navbarAllocation" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              <i class="bi bi-journal-plus me-1"></i>Allocation
-            </a>
-            <ul class="dropdown-menu" aria-labelledby="navbarAllocation">
-              <li><a class="dropdown-item" href="/material/issue"><i class="bi bi-box-seam me-2"></i>Issue Materials</a></li>
-              <li><a class="dropdown-item" href="/electric/add"><i class="bi bi-lightning-charge me-2"></i>Electric Bill</a></li>
-              <li><a class="dropdown-item" href="/shed/allocate"><i class="bi bi-building-add me-2"></i>Allocate Shed</a></li>
-            </ul>
-          </li>
+          <% if (user.role === 'admin' || user.role === 'booking_manager') { %>
+            <li class="nav-item"><a class="nav-link" href="/booking/add"><i class="bi bi-plus-square me-1"></i>Book Space</a></li>
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" id="navbarAllocation" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-journal-plus me-1"></i>Allocation
+              </a>
+              <ul class="dropdown-menu" aria-labelledby="navbarAllocation">
+                <li><a class="dropdown-item" href="/material/issue"><i class="bi bi-box-seam me-2"></i>Issue Materials</a></li>
+                <li><a class="dropdown-item" href="/electric/add"><i class="bi bi-lightning-charge me-2"></i>Electric Bill</a></li>
+                <li><a class="dropdown-item" href="/shed/allocate"><i class="bi bi-building-add me-2"></i>Allocate Shed</a></li>
+              </ul>
+            </li>
+          <% } %>
           <% if (user && user.role === 'admin') { %>
             <li class="nav-item dropdown">
               <a class="nav-link dropdown-toggle" href="#" id="navbarSettings" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -68,9 +70,9 @@
                 <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item" href="/settings/backup-db"><i class="bi bi-download me-2"></i>Backup Database</a></li>
                 <li><a class="dropdown-item" href="/settings/address"><i class="bi bi-geo-alt me-2"></i>Exhibition Address</a></li>
-                  <li><hr class="dropdown-divider"></li>
-                  <li><a class="dropdown-item" href="/users/manage"><i class="bi bi-person-plus me-2"></i>Manage Users</a></li>
-                  <li><a class="dropdown-item" href="/report/audit-log"><i class="bi bi-journal-text me-2"></i>View Audit Log</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="/users/manage"><i class="bi bi-person-plus me-2"></i>Manage Users</a></li>
+                <li><a class="dropdown-item" href="/report/audit-log"><i class="bi bi-journal-text me-2"></i>View Audit Log</a></li>
               </ul>
             </li>
           <% } %>

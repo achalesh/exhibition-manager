@@ -351,21 +351,27 @@
           labels: ['Rent', 'Electric', 'Material', 'Shed'],
           datasets: [
             {
-              label: 'Total Amount',
-              data: [financialsData.rent.charged, financialsData.electric.charged, financialsData.material.charged, financialsData.shed.charged],
-              backgroundColor: 'rgba(13, 110, 253, 0.6)', // Blue
-            },
-            {
               label: 'Amount Received',
               data: [financialsData.rent.paid, financialsData.electric.paid, financialsData.material.paid, financialsData.shed.paid],
-              backgroundColor: 'rgba(25, 135, 84, 0.6)', // Green
+              backgroundColor: 'rgba(25, 135, 84, 0.7)', // Green
+            },
+            {
+              label: 'Balance Due',
+              data: [financialsData.rent.due, financialsData.electric.due, financialsData.material.due, financialsData.shed.due],
+              backgroundColor: 'rgba(220, 53, 69, 0.7)', // Red
             }
           ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          scales: { y: { beginAtZero: true } }
+          plugins: {
+            title: { display: true, text: 'Charged = Received + Due' }
+          },
+          scales: { 
+            x: { stacked: true },
+            y: { stacked: true, beginAtZero: true } 
+          }
         }
       });
     }
