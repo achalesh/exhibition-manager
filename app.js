@@ -1,5 +1,6 @@
 console.log("Starting Exhibition Rental App...");
 
+require('dotenv').config(); // Load environment variables
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
@@ -27,7 +28,7 @@ app.set('views', path.join(__dirname, 'views'));
 
 // Session configuration
 app.use(session({
-  secret: 'your-very-secret-key-change-this', // Change this to a random secret
+  secret: process.env.SESSION_SECRET || 'default-secret-key',
   resave: false,
   saveUninitialized: false,
   cookie: { maxAge: 24 * 60 * 60 * 1000 } // 24 hours
@@ -47,19 +48,9 @@ const userRoutes = require('./routes/users');
 const authRoutes = require('./routes/auth');
 const accountingRoutes = require('./routes/accounting');
 const notificationRoutes = require('./routes/notification');
-
-// Middleware to fetch exhibition details for all routes
-app.use(async (req, res, next) => {
-  res.locals.appName = "Exhibition Manager"; // Set global app name
-  try {
-    const details = await get('SELECT name, address, location, place, logo_path FROM exhibition_details WHERE id = 1');
-    res.locals.exhibitionDetails = details || { name: 'Exhibition', address: 'N/A', location: 'N/A', place: 'N/A', logo_path: null };
-  } catch (error) {
-    console.error("Failed to fetch exhibition details:", error);
-    res.locals.exhibitionDetails = { name: 'Exhibition', address: 'Error loading details', location: '', place: '', logo_path: null };
-  }
-  next();
-});
+const sessionHandler = require('./sessionHandler');
+const sessionRoutes = require('./routes/sessions');
+const ticketingRoutes = require('./routes/ticketing');
 
 // Middleware to handle flash messages
 app.use((req, res, next) => {
@@ -72,21 +63,22 @@ app.use((req, res, next) => {
 
 // Middleware to make user session available in all views
 app.use((req, res, next) => {
+  res.locals.appName = "Exhibition Manager"; // Set global app name
   res.locals.user = req.session.user;
   res.locals.currentPath = req.path;
   next();
 });
 
-// --- Public Routes ---
-app.use('/', authRoutes);
+// Middleware to handle event sessions
+app.use(sessionHandler);
 
 // --- Protected Routes ---
-const isAuthenticated = (req, res, next) => {
-  if (req.session.user) {
-    return next();
-  }
-  res.redirect('/login');
-};
+const { isAuthenticated } = require('./routes/auth');
+
+// --- Public Routes ---
+// The auth routes for login/logout should be defined in a separate file or here.
+// Assuming they are now missing, I'll add a placeholder. If you have them elsewhere, you can adjust.
+app.use('/', require('./routes/authRoutes')); // We will create this file.
 
 // Route usage
 app.use('/space', isAuthenticated, spaceRoutes);
@@ -101,28 +93,47 @@ app.use('/staff', isAuthenticated, staffRoutes);
 app.use('/users', isAuthenticated, userRoutes);
 app.use('/notification', isAuthenticated, notificationRoutes);
 app.use('/accounting', isAuthenticated, accountingRoutes);
+app.use('/sessions', isAuthenticated, sessionRoutes);
+app.use('/ticketing', isAuthenticated, ticketingRoutes);
 
 // Dashboard route
 app.get('/dashboard', isAuthenticated, async (req, res) => {
   try {
+    const viewingSessionId = res.locals.viewingSession.id;
+
+    // --- Backup Alert Logic ---
+    let showBackupAlert = false;
+    if (req.session.user && req.session.user.role === 'admin') {
+      const lastBackup = await get("SELECT value FROM app_meta WHERE key = 'last_backup_date'");
+      const lastBackupDate = lastBackup ? lastBackup.value : '2000-01-01';
+      const today = new Date().toISOString().split('T')[0];
+      if (lastBackupDate !== today) {
+        showBackupAlert = true;
+      }
+    }
+
+    // --- Space/Stall Summary Queries (now session-aware) ---
     const categoryQuery = 'SELECT type, COUNT(*) as count FROM spaces GROUP BY type';
-    const statusQuery = 'SELECT status, COUNT(*) as count FROM spaces GROUP BY status';
     const totalQuery = 'SELECT COUNT(*) as count FROM spaces';
+    const bookedSpacesQuery = get('SELECT COUNT(DISTINCT space_id) as count FROM bookings WHERE event_session_id = ?', [viewingSessionId]);
     const spacesQuery = `
-      SELECT s.*, b.facia_name 
-      FROM spaces s 
-      LEFT JOIN bookings b ON s.id = b.space_id 
+      SELECT 
+        s.*, 
+        b.facia_name,
+        CASE WHEN b.id IS NOT NULL THEN 'Booked' ELSE 'Available' END as session_status
+      FROM spaces s
+      LEFT JOIN bookings b ON s.id = b.space_id AND b.event_session_id = ?
       ORDER BY s.type, s.name
     `;
 
     // --- Financial Summary Queries ---
     const financialQueries = [
-      get('SELECT SUM(rent_amount - COALESCE(discount, 0)) as charged FROM bookings'),
-      get('SELECT SUM(advance_amount) as paid_advance FROM bookings'),
-      get('SELECT SUM(rent_paid) as paid_rent, SUM(electric_paid) as paid_electric, SUM(material_paid) as paid_material, SUM(shed_paid) as paid_shed FROM payments'),
-      get('SELECT SUM(total_amount) as charged FROM electric_bills'),
-      get('SELECT SUM(total_payable) as charged FROM material_issues'),
-      get('SELECT SUM(s.rent) as charged FROM shed_allocations sa JOIN sheds s ON sa.shed_id = s.id')
+      get('SELECT SUM(rent_amount - COALESCE(discount, 0)) as charged FROM bookings WHERE event_session_id = ?', [viewingSessionId]),
+      get('SELECT SUM(advance_amount) as paid_advance FROM bookings WHERE event_session_id = ?', [viewingSessionId]),
+      get('SELECT SUM(p.rent_paid) as paid_rent, SUM(p.electric_paid) as paid_electric, SUM(p.material_paid) as paid_material, SUM(p.shed_paid) as paid_shed FROM payments p WHERE p.event_session_id = ?', [viewingSessionId]),
+      get('SELECT SUM(total_amount) as charged FROM electric_bills WHERE event_session_id = ?', [viewingSessionId]),
+      get('SELECT SUM(total_payable) as charged FROM material_issues WHERE event_session_id = ?', [viewingSessionId]),
+      get('SELECT SUM(s.rent) as charged FROM shed_allocations sa JOIN sheds s ON sa.shed_id = s.id WHERE sa.event_session_id = ?', [viewingSessionId])
     ];
     // Fetch pending approvals for admins
     if (req.session.user && req.session.user.role === 'admin') {
@@ -151,8 +162,8 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
     // Run all queries in parallel for better performance
     const [
       categories, 
-      statuses, 
       total, 
+      bookedSpacesResult,
       allSpaces,
       rentStats,
       advanceStats,
@@ -163,9 +174,9 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
       contextualData // This will be pendingApprovals for admins, or userNotifications for users
     ] = await Promise.all([
       all(categoryQuery),
-      all(statusQuery),
       get(totalQuery),
-      all(spacesQuery),
+      bookedSpacesQuery,
+      all(spacesQuery, [viewingSessionId]),
       ...financialQueries
     ]);
 
@@ -174,10 +185,9 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
       return acc;
     }, {});
 
-    const statusCounts = (statuses || []).reduce((acc, row) => {
-      acc[row.status] = row.count;
-      return acc;
-    }, { Booked: 0, Available: 0 });
+    const totalSpacesCount = total ? total.count : 0;
+    const bookedCount = bookedSpacesResult ? bookedSpacesResult.count : 0;
+    const statusCounts = { Booked: bookedCount, Available: totalSpacesCount - bookedCount };
 
     // Group spaces by type for the layout view
     const spacesByType = (allSpaces || []).reduce((acc, space) => {
@@ -221,18 +231,58 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
 
     res.render('dashboard', {
       title: 'Dashboard',
-      totalSpaces: total ? total.count : 0,
+      totalSpaces: totalSpacesCount,
       categoryCounts,
       statusCounts,
       spacesByType,
       financials,
       pendingApprovals: (req.session.user && req.session.user.role === 'admin') ? (contextualData || []) : [],
       userNotifications: (req.session.user && req.session.user.role !== 'admin') ? (contextualData || []) : [],
+      showBackupAlert,
       message: req.query.message
     });
   } catch (err) {
     console.error("Error loading dashboard:", err);
     res.status(500).send('Error loading dashboard data.');
+  }
+});
+
+// POST /dashboard/search - Handle search from the dashboard
+app.post('/dashboard/search', isAuthenticated, async (req, res) => {
+  const { q } = req.body;
+  const viewingSessionId = res.locals.viewingSession.id;
+
+  if (!q) {
+    return res.redirect('/dashboard');
+  }
+
+  try {
+    const searchSql = `
+      SELECT b.id
+      FROM bookings b
+      JOIN spaces s ON b.space_id = s.id
+      WHERE b.event_session_id = ? AND (
+        b.exhibitor_name LIKE ? OR
+        b.facia_name LIKE ? OR
+        s.name LIKE ?
+      )
+    `;
+    const results = await all(searchSql, [viewingSessionId, `%${q}%`, `%${q}%`, `%${q}%`]);
+
+    if (results.length === 1) {
+      // Perfect match, go to details
+      res.redirect(`/booking/details-full/${results[0].id}`);
+    } else {
+      // No results or multiple results, redirect to booking list with a filter (future enhancement)
+      // For now, show a message on the dashboard.
+      const message = results.length === 0 ? `No exhibitor found for "${q}".` : `${results.length} exhibitors found for "${q}". Please check the booking list.`;
+      req.session.flash = { type: 'info', message: message };
+      res.redirect('/dashboard');
+    }
+  } catch (err) {
+    console.error('Dashboard search error:', err);
+    req.session.flash = { type: 'danger', message: 'An error occurred during the search.' };
+    res.redirect('/dashboard');
   }
 });
 
@@ -246,8 +296,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-
-// Start server
-//app.listen(3000, () => {
-//  console.log('Server running at http://localhost:3000');
-//});

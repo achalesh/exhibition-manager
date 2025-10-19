@@ -1,0 +1,93 @@
+<%- include('partials/header') %>
+
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0 text-gray-800"><%= title %></h1>
+    <div class="no-print">
+      <a href="/report/payment-received/csv?start_date=<%= filters.start_date %>&end_date=<%= filters.end_date %>&q=<%= filters.q %>" class="btn btn-success btn-sm"><i class="bi bi-download me-1"></i> Download CSV</a>
+      <button onclick="window.print()" class="btn btn-secondary btn-sm"><i class="bi bi-printer-fill me-1"></i> Print</button>
+    </div>
+  </div>
+
+  <!-- Filter Form -->
+  <div class="card shadow-sm mb-4 no-print">
+    <div class="card-header py-3">
+      <h6 class="m-0 fw-bold text-primary">Filter Report</h6>
+    </div>
+    <div class="card-body">
+      <form action="/report/payment-received" method="GET" class="row g-3 align-items-end">
+        <div class="col-md-3">
+          <label for="start_date" class="form-label">Start Date</label>
+          <input type="date" id="start_date" name="start_date" class="form-control" value="<%= filters.start_date %>">
+        </div>
+        <div class="col-md-3">
+          <label for="end_date" class="form-label">End Date</label>
+          <input type="date" id="end_date" name="end_date" class="form-control" value="<%= filters.end_date %>">
+        </div>
+        <div class="col-md-4">
+          <label for="q" class="form-label">Search by Exhibitor, Space, or Receipt No.</label>
+          <input type="text" id="q" name="q" class="form-control" value="<%= filters.q %>" placeholder="e.g., John Doe, A-01, R-123">
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-primary w-100">Search</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-3 d-flex justify-content-between align-items-center">
+      <h6 class="m-0 fw-bold text-primary">Payments Received for: <%= viewingSession.name %></h6>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-bordered table-striped" id="dataTable">
+          <thead class="table-light">
+            <tr>
+              <th>Date</th>
+              <th>Receipt No.</th>
+              <th>Exhibitor</th>
+              <th>Space</th>
+              <th>Category</th>
+              <th>Mode</th>
+              <th class="text-end">Cash Paid</th>
+              <th class="text-end">UPI Paid</th>
+              <th class="text-end fw-bold">Total Paid</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (payments.length === 0) { %>
+              <tr>
+                <td colspan="9" class="text-center">No payments found for the selected criteria.</td>
+              </tr>
+            <% } else { %>
+              <% payments.forEach(p => { %>
+                <tr>
+                  <td><%= new Date(p.payment_date).toLocaleDateString() %></td>
+                  <td><%= p.receipt_number || 'N/A' %></td>
+                  <td><%= p.exhibitor_name %></td>
+                  <td><%= p.space_name %></td>
+                  <td><span class="badge bg-info text-dark"><%= p.payment_category %></span></td>
+                  <td><%= p.payment_mode %></td>
+                  <td class="text-end"><%= p.cash_paid.toFixed(2) %></td>
+                  <td class="text-end"><%= p.upi_paid.toFixed(2) %></td>
+                  <td class="text-end fw-bold"><%= p.total_paid.toFixed(2) %></td>
+                </tr>
+              <% }) %>
+            <% } %>
+          </tbody>
+          <tfoot class="table-light fw-bold">
+            <tr>
+              <td colspan="6" class="text-end">Grand Total</td>
+              <td class="text-end"><%= payments.reduce((sum, p) => sum + p.cash_paid, 0).toFixed(2) %></td>
+              <td class="text-end"><%= payments.reduce((sum, p) => sum + p.upi_paid, 0).toFixed(2) %></td>
+              <td class="text-end"><%= payments.reduce((sum, p) => sum + p.total_paid, 0).toFixed(2) %></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

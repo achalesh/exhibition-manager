@@ -5,7 +5,15 @@ const { all, get, run } = require('../db-helpers');
 // GET: Show form to add/manage spaces
 router.get('/add', async (req, res) => {
   try {
-    const spaces = await all('SELECT * FROM spaces ORDER BY type, name');
+    const viewingSessionId = res.locals.viewingSession.id;
+    const spaces = await all(`
+      SELECT 
+        s.*,
+        CASE WHEN b.id IS NOT NULL THEN 'Booked' ELSE 'Available' END as session_status
+      FROM spaces s
+      LEFT JOIN bookings b ON s.id = b.space_id AND b.event_session_id = ?
+      ORDER BY s.type, s.name
+    `, [viewingSessionId]);
     res.render('manageSpaces', {
       title: 'Manage Spaces',
       spaces: spaces || [],
@@ -21,6 +29,12 @@ router.get('/add', async (req, res) => {
 // POST: Add a new space
 router.post('/add', async (req, res) => {
   const { type, name, size, rent_amount, facilities, location } = req.body;
+
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    req.session.flash = { type: 'warning', message: 'Cannot add spaces in an archived session.' };
+    return res.redirect('/space/add');
+  }
+
   try {
     await run(
       'INSERT INTO spaces (type, name, size, rent_amount, facilities, location) VALUES (?, ?, ?, ?, ?, ?)',
@@ -38,7 +52,15 @@ router.post('/add', async (req, res) => {
 router.get('/edit/:id', async (req, res) => {
   try {
     const spaceToEdit = await get('SELECT * FROM spaces WHERE id = ?', [req.params.id]);
-    const allSpaces = await all('SELECT * FROM spaces ORDER BY type, name');
+    const viewingSessionId = res.locals.viewingSession.id;
+    const allSpaces = await all(`
+      SELECT 
+        s.*,
+        CASE WHEN b.id IS NOT NULL THEN 'Booked' ELSE 'Available' END as session_status
+      FROM spaces s
+      LEFT JOIN bookings b ON s.id = b.space_id AND b.event_session_id = ?
+      ORDER BY s.type, name
+    `, [viewingSessionId]);
 
     if (!spaceToEdit) {
       // Handle case where space is not found
@@ -60,6 +82,12 @@ router.get('/edit/:id', async (req, res) => {
 // POST: Update a space
 router.post('/edit/:id', async (req, res) => {
   const { type, name, size, rent_amount, facilities, location } = req.body;
+
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    req.session.flash = { type: 'warning', message: 'Cannot edit spaces in an archived session.' };
+    return res.redirect('/space/add');
+  }
+
   try {
     await run('UPDATE spaces SET type=?, name=?, size=?, rent_amount=?, facilities=?, location=? WHERE id=?', [type, name, size, rent_amount, facilities, location, req.params.id]);
     req.session.flash = { type: 'success', message: `Space '${name}' was updated successfully.` };
@@ -73,6 +101,12 @@ router.post('/edit/:id', async (req, res) => {
 // POST: Delete a space
 router.post('/delete/:id', async (req, res) => {
   const { id } = req.params;
+
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    req.session.flash = { type: 'warning', message: 'Cannot delete spaces from an archived session.' };
+    return res.redirect('/space/add');
+  }
+
   try {
     // Check if the space is currently booked
     const booking = await get('SELECT id FROM bookings WHERE space_id = ?', [id]);

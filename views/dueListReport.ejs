@@ -1,0 +1,152 @@
+<%- include('partials/header') %>
+
+<div class="container-fluid">
+  <h1 class="h3 mb-4 text-gray-800"><%= title %></h1>
+
+  <!-- Filter Form -->
+  <div class="card shadow-sm mb-4 no-print">
+    <div class="card-header py-3">
+      <h6 class="m-0 fw-bold text-primary">Filter Report</h6>
+    </div>
+    <div class="card-body">
+      <form action="/report/due-list" method="GET" class="row g-3 align-items-end">
+        <div class="col-md-10">
+          <label for="q" class="form-label">Search by Exhibitor or Space Name</label>
+          <input type="text" id="q" name="q" class="form-control" value="<%= filters.q %>" placeholder="e.g., John Doe or A-01">
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-primary w-100">Search</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Tab Navigation -->
+  <ul class="nav nav-tabs no-print" id="dueListTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="all-dues-tab" data-bs-toggle="tab" data-bs-target="#all-dues" type="button" role="tab" aria-controls="all-dues" aria-selected="true">All Dues (<%= dueLists.all.length %>)</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="rent-dues-tab" data-bs-toggle="tab" data-bs-target="#rent-dues" type="button" role="tab" aria-controls="rent-dues" aria-selected="false">Rent Dues (<%= dueLists.rent.length %>)</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="electric-dues-tab" data-bs-toggle="tab" data-bs-target="#electric-dues" type="button" role="tab" aria-controls="electric-dues" aria-selected="false">Electric Dues (<%= dueLists.electric.length %>)</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="material-dues-tab" data-bs-toggle="tab" data-bs-target="#material-dues" type="button" role="tab" aria-controls="material-dues" aria-selected="false">Material Dues (<%= dueLists.material.length %>)</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="shed-dues-tab" data-bs-toggle="tab" data-bs-target="#shed-dues" type="button" role="tab" aria-controls="shed-dues" aria-selected="false">Shed Dues (<%= dueLists.shed.length %>)</button>
+    </li>
+  </ul>
+
+  <!-- Tab Content -->
+  <div class="tab-content" id="dueListTabsContent">
+    <% 
+      const categories = [
+        { id: 'all', name: 'All Dues', data: dueLists.all, columns: { total: 'total_charged', paid: 'total_paid', due: 'total_due' } },
+        { id: 'rent', name: 'Rent Dues', data: dueLists.rent, columns: { total: 'total_rent_charge', paid: 'total_rent_paid', due: 'rent_due' } },
+        { id: 'electric', name: 'Electric Dues', data: dueLists.electric, columns: { total: 'total_electric_charge', paid: 'total_electric_paid', due: 'electric_due' } },
+        { id: 'material', name: 'Material Dues', data: dueLists.material, columns: { total: 'total_material_charge', paid: 'total_material_paid', due: 'material_due' } },
+        { id: 'shed', name: 'Shed Dues', data: dueLists.shed, columns: { total: 'total_shed_charge', paid: 'total_shed_paid', due: 'shed_due' } }
+      ];
+    %>
+
+    <% categories.forEach(cat => { %>
+      <div class="tab-pane fade <%= cat.id === 'all' ? 'show active' : '' %>" id="<%= cat.id %>-dues" role="tabpanel" aria-labelledby="<%= cat.id %>-dues-tab">
+        <div class="card shadow-sm card-tab-content">
+          <div class="card-header py-3 d-flex justify-content-between align-items-center print-header">
+            <h6 class="m-0 fw-bold text-primary"><%= cat.name %> for: <%= viewingSession.name %></h6>
+            <div class="no-print">
+              <a href="/report/due-list/csv?q=<%= filters.q %>&category=<%= cat.id %>" class="btn btn-success btn-sm"><i class="bi bi-download me-1"></i> Download CSV</a>
+              <button onclick="printTab('<%= cat.id %>-dues')" class="btn btn-secondary btn-sm"><i class="bi bi-printer-fill me-1"></i> Print Tab</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped" id="dataTable-<%= cat.id %>">
+                <thead class="table-light">
+                  <tr>
+                    <th>#</th>
+                    <th>Exhibitor Name</th>
+                    <th>Facia Name</th>
+                    <th>Space</th>
+                    <th class="text-end">Total Amount</th>
+                    <th class="text-end">Paid Amount</th>
+                    <th class="text-end fw-bold">Balance Due</th>
+                    <th class="no-print">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% if (cat.data.length === 0) { %>
+                    <tr>
+                      <td colspan="8" class="text-center">No outstanding <%= cat.name.toLowerCase() %> found.</td>
+                    </tr>
+                  <% } else { %>
+                    <% cat.data.forEach((item, index) => { %>
+                      <tr>
+                        <td><%= index + 1 %></td>
+                        <td><%= item.exhibitor_name %></td>
+                        <td><%= item.facia_name || 'N/A' %></td>
+                        <td><%= item.space_name %></td>
+                        <td class="text-end"><%= (item[cat.columns.total] || 0).toFixed(2) %></td>
+                        <td class="text-end text-success"><%= (item[cat.columns.paid] || 0).toFixed(2) %></td>
+                        <td class="text-end fw-bold text-danger"><%= (item[cat.columns.due] || 0).toFixed(2) %></td>
+                        <td class="no-print">
+                          <a href="/booking/details-full/<%= item.booking_id %>" class="btn btn-sm btn-info">Details</a>
+                        </td>
+                      </tr>
+                    <% }) %>
+                  <% } %>
+                </tbody>
+                <% if (cat.data.length > 0) { %>
+                  <tfoot class="table-light">
+                    <tr class="fw-bold">
+                      <td colspan="<%= cat.id === 'all' ? 4 : 3 %>" class="text-end">Grand Total</td>
+                      <td class="text-end"><%= cat.data.reduce((sum, item) => sum + (item[cat.columns.total] || 0), 0).toFixed(2) %></td>
+                      <td class="text-end"><%= cat.data.reduce((sum, item) => sum + (item[cat.columns.paid] || 0), 0).toFixed(2) %></td>
+                      <td class="text-end"><%= cat.data.reduce((sum, item) => sum + (item[cat.columns.due] || 0), 0).toFixed(2) %></td>
+                      <td class="no-print"></td>
+                    </tr>
+                  </tfoot>
+                <% } %>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    <% }) %>
+  </div>
+</div>
+
+<%- include('partials/footer') %>
+
+<style>
+  @media print {
+    body * {
+      visibility: hidden;
+    }
+    .print-area, .print-area * {
+      visibility: visible;
+    }
+    .print-area {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+    }
+  }
+  /* Minor style adjustment to remove double border when tabs are active */
+  .card-tab-content {
+    border-top-left-radius: 0;
+  }
+</style>
+
+<script>
+  function printTab(tabId) {
+    const tabContent = document.getElementById(tabId);
+    tabContent.classList.add('print-area');
+    window.print();
+    tabContent.classList.remove('print-area');
+  }
+</script>

@@ -20,10 +20,10 @@ const upload = multer({ storage: storage });
 // GET: Show form to manage exhibition address and logo
 router.get('/address', async (req, res) => {
   try {
-    const details = await get('SELECT * FROM exhibition_details WHERE id = 1');
+    // The details are now the active session's details
     res.render('exhibitionAddress', {
       title: 'Exhibition Details',
-      details: details || {},
+      details: res.locals.activeSession || {},
       report_url: '/settings/address'
     });
   } catch (err) {
@@ -35,7 +35,8 @@ router.get('/address', async (req, res) => {
 // POST: Update exhibition address and logo
 router.post('/address', upload.single('logo'), async (req, res) => {
   const { name, address, location, place } = req.body;
-  let logo_path = req.body.existing_logo_path; // Keep old logo if new one isn't uploaded
+  const activeSessionId = res.locals.activeSession.id;
+  let logo_path = res.locals.activeSession.logo_path; // Keep old logo if new one isn't uploaded
 
   if (req.file) {
     logo_path = `/uploads/logos/${req.file.filename}`;
@@ -43,8 +44,8 @@ router.post('/address', upload.single('logo'), async (req, res) => {
 
   try {
     await run(
-      'UPDATE exhibition_details SET name = ?, address = ?, location = ?, place = ?, logo_path = ? WHERE id = 1',
-      [name, address, location, place, logo_path]
+      'UPDATE event_sessions SET name = ?, address = ?, location = ?, place = ?, logo_path = ? WHERE id = ?',
+      [name, address, location, place, logo_path, activeSessionId]
     );
     req.session.flash = { type: 'success', message: 'Exhibition details updated successfully.' };
     res.redirect('/settings/address');
@@ -87,7 +88,18 @@ router.get('/backup-db', (req, res) => {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const backupFilename = `exhibition-backup-${timestamp}.db`;
 
-  res.download(dbPath, backupFilename);
+  res.download(dbPath, backupFilename, async (err) => {
+    if (!err) {
+      // Backup was successful, update the last backup date
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      try {
+        await run("UPDATE app_meta SET value = ? WHERE key = 'last_backup_date'", [today]);
+        console.log('Last backup date updated to:', today);
+      } catch (dbErr) {
+        console.error('Failed to update last backup date:', dbErr);
+      }
+    }
+  });
 });
 
 

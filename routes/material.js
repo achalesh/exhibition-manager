@@ -45,6 +45,11 @@ router.post('/issue', async (req, res) => {
         total_payable, advance_paid, balance_due, notes, issue_date
     } = req.body;
 
+    if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+        req.session.flash = { type: 'warning', message: 'Cannot issue materials in an archived session.' };
+        return res.redirect(`/material/issue${client_id ? '?client_id=' + client_id : ''}`);
+    }
+
     db.serialize(async () => {
         try {
             db.run('BEGIN TRANSACTION');
@@ -130,6 +135,12 @@ router.post('/edit/:id', async (req, res) => {
         table_numbers, chair_numbers,
         total_payable, advance_paid, balance_due, notes, issue_date
     } = req.body;
+
+    if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+        const booking = await get('SELECT b.id FROM bookings b JOIN clients c ON b.client_id = c.id JOIN material_issues mi ON c.id = mi.client_id WHERE mi.id = ?', [issueId]);
+        req.session.flash = { type: 'warning', message: 'Cannot edit data in an archived session.' };
+        return res.redirect(`/booking/details-full/${booking.id}`);
+    }
 
     if (req.session.user && req.session.user.role === 'admin') {
         db.serialize(async () => {

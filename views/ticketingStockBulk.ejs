@@ -1,0 +1,36 @@
+<%- include('partials/header') %>
+
+<div class="container-fluid">
+  <%- include('partials/ticketingNav') %>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-3">
+      <h6 class="m-0 fw-bold text-primary">Bulk Upload Ticket Stock</h6>
+    </div>
+    <div class="card-body">
+      <div class="alert alert-info">
+        <h5 class="alert-heading">CSV File Format Instructions</h5>
+        <p>Please upload a CSV file with the following four columns in this exact order. The file should not contain a header row.</p>
+        <ol>
+          <li><strong>Rate:</strong> The ticket rate (must be <code>100</code> or <code>50</code>).</li>
+          <li><strong>Color:</strong> The ticket color (e.g., <code>Red</code>, <code>Green</code>, <code>Blue</code>, <code>Yellow</code>, <code>Pink</code>).</li>
+          <li><strong>Start Number:</strong> The starting serial number of the bundle.</li>
+          <li><strong>End Number:</strong> The ending serial number of the bundle.</li>
+        </ol>
+        <p><strong>Example:</strong></p>
+        <pre class="mb-0">100,Red,1001,2000<br>50,Blue,5001,6000</pre>
+      </div>
+
+      <form action="/ticketing/stock/bulk-upload" method="POST" enctype="multipart/form-data">
+        <div class="mb-3">
+          <label for="stockFile" class="form-label">Select CSV File</label>
+          <input class="form-control" type="file" id="stockFile" name="stockFile" accept=".csv" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Upload and Process File</button>
+        <a href="/ticketing/stock" class="btn btn-secondary">Cancel</a>
+      </form>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

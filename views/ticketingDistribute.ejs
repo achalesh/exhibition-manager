@@ -1,0 +1,114 @@
+<%- include('partials/header') %>
+
+<div class="container-fluid">
+  <%- include('partials/ticketingNav') %>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-3">
+      <h6 class="m-0 fw-bold text-primary">Distribute New Ticket Book</h6>
+    </div>
+    <div class="card-body">
+      <form action="/ticketing/distribute" method="POST" class="row g-3 align-items-end">
+        <div class="col-md-3">
+          <label for="staff_id" class="form-label">Staff Member</label>
+          <select id="staff_id" name="staff_id" class="form-select" required>
+            <option value="" disabled selected>Select Staff...</option>
+            <% staff.forEach(s => { %>
+              <option value="<%= s.id %>"><%= s.name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label for="ride_id" class="form-label">Assign to Ride / Entry</label>
+          <select id="ride_id" name="ride_id" class="form-select" required>
+            <option value="" disabled selected>Select a ride...</option>
+            <% rides.forEach(ride => { %>
+              <option value="<%= ride.id %>" data-rate="<%= ride.rate %>"><%= ride.name %> (₹<%= ride.rate %>)</option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label for="stock_id" class="form-label">From Available Stock</label>
+          <select id="stock_id" name="stock_id" class="form-select" required>
+            <option value="" disabled selected>Select a ride first...</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-primary w-100">Distribute Bundle</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="alert alert-info">
+    <h5 class="alert-heading">Workflow</h5>
+    <p>1. Select a staff member and the ride/entry point they will be working at. <br> 2. The "From Available Stock" dropdown will automatically show ticket bundles that match the ride's rate. <br> 3. Select a bundle and click "Distribute".</p>
+    <p class="mb-0">After the shift, go to the <strong>Settle Sales</strong> page to enter the returned ticket numbers and calculate the revenue.</p>
+  </div>
+</div>
+
+<div class="card shadow-sm mt-4">
+  <div class="card-header py-3">
+    <h6 class="m-0 fw-bold text-primary">Currently Distributed Tickets</h6>
+  </div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-bordered" id="dataTable">
+        <thead>
+          <tr>
+            <th>Staff Member</th>
+            <th>Ride Name</th>
+            <th>Color</th>
+            <th>Serial Range</th>
+            <th>Date Distributed</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% distributedTickets.forEach(d => { %>
+            <tr>
+              <td><%= d.staff_name %></td>
+              <td><%= d.ride_name %></td>
+              <td><span class="badge" style="background-color: <%= d.color ? d.color.toLowerCase() : 'grey' %>;"><%= d.color %></span></td>
+              <td><%= d.start_number %> - <%= d.end_number %></td>
+              <td><%= new Date(d.distribution_date).toLocaleDateString() %></td>
+              <td>
+                <a href="/ticketing/distribute/edit/<%= d.id %>" class="btn btn-sm btn-warning me-1" title="Edit"><i class="bi bi-pencil"></i></a>
+                <form action="/ticketing/distribute/delete/<%= d.id %>" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to recall this ticket bundle?');">
+                  <button type="submit" class="btn btn-sm btn-danger" title="Recall Bundle"><i class="bi bi-arrow-return-left"></i></button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  const allStock = <%- JSON.stringify(stock) %>;
+  const rideSelect = document.getElementById('ride_id');
+  const stockSelect = document.getElementById('stock_id');
+
+  rideSelect.addEventListener('change', (event) => {
+    const selectedRate = event.target.options[event.target.selectedIndex].dataset.rate;
+    
+    // Clear current options
+    stockSelect.innerHTML = '<option value="" disabled selected>Select a stock bundle...</option>';
+
+    // Filter and add new options
+    const matchingStock = allStock.filter(item => item.rate == selectedRate);
+    
+    if (matchingStock.length === 0) {
+      stockSelect.innerHTML = '<option value="" disabled selected>No available stock for this rate</option>';
+    } else {
+      matchingStock.forEach(item => {
+        const option = new Option(`Rate ${item.rate} | ${item.color} | ${item.start_number} - ${item.end_number}`, item.id);
+        stockSelect.add(option);
+      });
+    }
+  });
+</script>
+
+<%- include('partials/footer') %>

@@ -14,12 +14,12 @@
   <header class="main-header mb-4 p-5 text-white rounded-3 shadow-sm">
     <div class="d-flex justify-content-between align-items-center">
       <div class="d-flex align-items-center">
-        <% if (exhibitionDetails.logo_path) { %>
-          <img src="<%= exhibitionDetails.logo_path %>" alt="Logo" class="logo">
+        <% if (viewingSession.logo_path) { %>
+          <img src="<%= viewingSession.logo_path %>" alt="Logo" class="logo">
         <% } %>
         <div>
-          <h1 class="display-5 fw-bold"><%= exhibitionDetails.name %></h1>
-          <p class="fs-5 mb-0"><%= exhibitionDetails.address %>, <%= exhibitionDetails.location %></p>
+          <h1 class="display-5 fw-bold"><%= viewingSession.name %></h1>
+          <p class="fs-5 mb-0"><%= viewingSession.address || '' %>, <%= viewingSession.location || '' %></p>
         </div>
       </div>
       <div class="text-end">
@@ -39,15 +39,17 @@
           <li class="nav-item"><a class="nav-link" href="/"><i class="bi bi-speedometer2 me-1"></i>Dashboard</a></li>
           <li class="nav-item"><a class="nav-link" href="/booking/list"><i class="bi bi-list-ul me-1"></i>View Bookings</a></li>
           <li class="nav-item"><a class="nav-link" href="/booking/add"><i class="bi bi-plus-square me-1"></i>Book Space</a></li>
-          <li class="nav-item"><a class="nav-link" href="/material/issue"><i class="bi bi-box-seam me-1"></i>Issue Materials</a></li>
-          <li class="nav-item"><a class="nav-link" href="/electric/add"><i class="bi bi-lightning-charge me-1"></i>Electric Bill</a></li>
-          <li class="nav-item"><a class="nav-link" href="/shed/allocate"><i class="bi bi-building-add me-1"></i>Allocate Shed</a></li>
-          <% if (user && user.role === 'admin') { %>
-          <li class="nav-item <%= currentPath.startsWith('/accounting') ? 'active' : '' %>">
-            <a class="nav-link" href="/accounting">
-              <i class="bi bi-calculator me-1"></i>Accounting
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="navbarAllocation" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              <i class="bi bi-journal-plus me-1"></i>Allocation
             </a>
+            <ul class="dropdown-menu" aria-labelledby="navbarAllocation">
+              <li><a class="dropdown-item" href="/material/issue"><i class="bi bi-box-seam me-2"></i>Issue Materials</a></li>
+              <li><a class="dropdown-item" href="/electric/add"><i class="bi bi-lightning-charge me-2"></i>Electric Bill</a></li>
+              <li><a class="dropdown-item" href="/shed/allocate"><i class="bi bi-building-add me-2"></i>Allocate Shed</a></li>
+            </ul>
           </li>
+          <% if (user && user.role === 'admin') { %>
             <li class="nav-item dropdown">
               <a class="nav-link dropdown-toggle" href="#" id="navbarSettings" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="bi bi-gear-fill me-1"></i>Settings
@@ -55,10 +57,14 @@
               <ul class="dropdown-menu" aria-labelledby="navbarSettings">
                 <li><a class="dropdown-item" href="/space/add"><i class="bi bi-grid me-2"></i>Manage Spaces</a></li>
                 <li><a class="dropdown-item" href="/shed/manage"><i class="bi bi-building-gear me-2"></i>Manage Sheds</a></li>
+                <li><a class="dropdown-item" href="/staff/list"><i class="bi bi-people me-2"></i>Manage Staff</a></li>
                 <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item" href="/report"><i class="bi bi-file-earmark-bar-graph me-2"></i>Reports</a></li>
                 <li><a class="dropdown-item" href="/charges/add"><i class="bi bi-currency-rupee me-2"></i>Receive Payments</a></li>
-                <li><a class="dropdown-item" href="/staff/list"><i class="bi bi-people me-2"></i>Manage Staff</a></li>
+                <li><a class="dropdown-item" href="/ticketing"><i class="bi bi-ticket-perforated me-2"></i>Ticketing</a></li>
+                <li><a class="dropdown-item" href="/accounting"><i class="bi bi-calculator me-2"></i>Accounting</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="/sessions"><i class="bi bi-map me-2"></i>Manage Sessions</a></li>
                 <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item" href="/settings/backup-db"><i class="bi bi-download me-2"></i>Backup Database</a></li>
                 <li><a class="dropdown-item" href="/settings/address"><i class="bi bi-geo-alt me-2"></i>Exhibition Address</a></li>

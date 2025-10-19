@@ -28,6 +28,12 @@ router.post('/add', upload.single('photo'), async (req, res) => {
   const { name, dob, address, phone, secondary_phone, aadhaar, role } = req.body;
   const photo_path = req.file ? `/uploads/staff_photos/${req.file.filename}` : null;
   const aadhaarValue = aadhaar || null; // Convert empty string to NULL for the database
+  const activeSessionId = res.locals.activeSession.id;
+
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    req.session.flash = { type: 'warning', message: 'Cannot add staff in an archived session.' };
+    return res.redirect('/staff/add');
+  }
 
   if (!name || !phone || !role) {
     return res.status(400).send('Name, Phone Number, and Role are required.');
@@ -43,8 +49,8 @@ router.post('/add', upload.single('photo'), async (req, res) => {
       }
     }
 
-    const sql = `INSERT INTO booking_staff (name, dob, address, phone, secondary_phone, aadhaar, photo_path, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-    await run(sql, [name, dob, address, phone, secondary_phone, aadhaarValue, photo_path, role]);
+    const sql = `INSERT INTO booking_staff (name, dob, address, phone, secondary_phone, aadhaar, photo_path, role, event_session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    await run(sql, [name, dob, address, phone, secondary_phone, aadhaarValue, photo_path, role, activeSessionId]);
     res.redirect('/staff/list');
   } catch (err) {
     console.error('Error adding booking staff:', err.message);
@@ -54,12 +60,13 @@ router.post('/add', upload.single('photo'), async (req, res) => {
 
 // GET: List all staff members
 router.get('/list', async (req, res) => {
+  const viewingSessionId = res.locals.viewingSession.id;
   const filterRole = req.query.role || 'all';
-  let sql = 'SELECT * FROM booking_staff';
-  const params = [];
+  let sql = 'SELECT * FROM booking_staff WHERE event_session_id = ?';
+  const params = [viewingSessionId];
 
   if (filterRole !== 'all') {
-    sql += ' WHERE role = ?';
+    sql += ' AND role = ?';
     params.push(filterRole);
   }
   sql += ' ORDER BY name';

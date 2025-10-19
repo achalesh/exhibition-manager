@@ -50,6 +50,13 @@ router.post('/add', async (req, res) => {
     id_proof, rent_amount, discount, advance_amount, due_amount, form_submitted
   } = req.body;
 
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    req.session.flash = { type: 'warning', message: 'Cannot add bookings to an archived session. Please switch to the active session.' };
+    return res.redirect('/booking/add');
+  }
+
+  const activeSessionId = res.locals.activeSession.id;
+
   const formSubmittedStatus = form_submitted ? 1 : 0;
   if (!space_id || !exhibitor_name || !contact_person || !contact_number) { // Basic validation
     return res.status(400).send('Missing required fields: space, exhibitor name, contact person, and contact number are required.');
@@ -60,24 +67,26 @@ router.post('/add', async (req, res) => {
     try {
       db.run('BEGIN TRANSACTION');
 
-      // Step 1: Create client
-      const clientSql = `INSERT INTO clients (name, contact_person, contact_number, full_address) VALUES (?, ?, ?, ?)`;
-      const clientParams = [exhibitor_name, contact_person, contact_number, full_address];
-      const { lastID: clientId } = await run(clientSql, clientParams);
+      // Step 1: Find or Create client to prevent duplicates
+      let client = await get('SELECT id FROM clients WHERE name = ?', [exhibitor_name]);
+      let clientId;
+      if (client) {
+        clientId = client.id;
+      } else {
+        const clientSql = `INSERT INTO clients (name, contact_person, contact_number, full_address) VALUES (?, ?, ?, ?)`;
+        clientId = (await run(clientSql, [exhibitor_name, contact_person, contact_number, full_address])).lastID;
+      }
 
       // Step 2: Create booking
       const bookingSql = `
         INSERT INTO bookings (
           space_id, client_id, booking_date, exhibitor_name, facia_name, product_category,
-          contact_person, full_address, contact_number, secondary_number, id_proof,
+          contact_person, full_address, contact_number, secondary_number, id_proof, event_session_id,
           rent_amount, discount, advance_amount, due_amount, form_submitted
-        ) VALUES (?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
-      const bookingParams = [space_id, clientId, exhibitor_name, facia_name, product_category, contact_person, full_address, contact_number, secondary_number, id_proof, rent_amount, discount, advance_amount, due_amount, formSubmittedStatus];
+      const bookingParams = [space_id, clientId, exhibitor_name, facia_name, product_category, contact_person, full_address, contact_number, secondary_number, id_proof, activeSessionId, rent_amount, discount, advance_amount, due_amount, formSubmittedStatus];
       const { lastID: bookingId } = await run(bookingSql, bookingParams);
-
-      // Step 3: Update space status
-      await run('UPDATE spaces SET status = "Booked" WHERE id = ?', [space_id]);
 
       db.run('COMMIT');
       res.redirect(`/booking/confirmation/${bookingId}`);
@@ -92,12 +101,15 @@ router.post('/add', async (req, res) => {
 
 // GET: Booking list
 router.get('/list', async (req, res) => {
+  const viewingSessionId = res.locals.viewingSession.id;
   const filter = req.query.form_status || 'all';
-  let whereClause = '';
+  const whereClauses = ['b.event_session_id = ?'];
+  const params = [viewingSessionId];
+
   if (filter === 'submitted') {
-    whereClause = 'WHERE b.form_submitted = 1';
+    whereClauses.push('b.form_submitted = 1');
   } else if (filter === 'not_submitted') {
-    whereClause = 'WHERE b.form_submitted = 0';
+    whereClauses.push('b.form_submitted = 0');
   }
 
   const sql = `
@@ -105,7 +117,7 @@ router.get('/list', async (req, res) => {
            b.rent_amount, b.discount, b.due_amount, b.form_submitted
     FROM bookings b
     JOIN spaces s ON b.space_id = s.id
-    ${whereClause}
+    WHERE ${whereClauses.join(' AND ')}
     ORDER BY
       CASE s.type
         WHEN 'Pavilion' THEN 1
@@ -116,7 +128,7 @@ router.get('/list', async (req, res) => {
       s.name
   `;
   try {
-    const bookings = await all(sql);
+    const bookings = await all(sql, params);
     res.render('bookings', { title: 'View Bookings', bookings, currentFilter: filter, message: req.query.message });
   } catch (err) {
     console.error("Error fetching bookings:", err.message);
@@ -150,12 +162,14 @@ router.get('/confirmation/:id', async (req, res) => {
 // GET: Show full details for a booking, including materials and electric bills
 router.get('/details-full/:id', async (req, res) => {
   const bookingId = parseInt(req.params.id, 10);
+  const viewingSessionId = res.locals.viewingSession.id;
   try {
     // --- Logic for Next/Back buttons ---
     const orderedBookingsSql = `
       SELECT b.id
       FROM bookings b
       JOIN spaces s ON b.space_id = s.id
+      WHERE b.event_session_id = ?
       ORDER BY
         CASE s.type
           WHEN 'Pavilion' THEN 1
@@ -165,7 +179,7 @@ router.get('/details-full/:id', async (req, res) => {
         END,
         s.name
     `;
-    const allBookingIds = (await all(orderedBookingsSql)).map(b => b.id);
+    const allBookingIds = (await all(orderedBookingsSql, [viewingSessionId])).map(b => b.id);
     const currentIndex = allBookingIds.indexOf(bookingId);
 
     const previousId = currentIndex > 0 ? allBookingIds[currentIndex - 1] : null;
@@ -178,19 +192,19 @@ router.get('/details-full/:id', async (req, res) => {
       FROM bookings b
       JOIN clients c ON b.client_id = c.id
       JOIN spaces s ON b.space_id = s.id
-      WHERE b.id = ?
+      WHERE b.id = ? AND b.event_session_id = ?
     `;
-    const booking = await get(bookingSql, [bookingId]);
+    const booking = await get(bookingSql, [bookingId, viewingSessionId]);
 
     if (!booking) {
       return res.status(404).send('Booking not found.');
     }
 
     // Fetch related material issues
-    const materials = await all('SELECT * FROM material_issues WHERE client_id = ?', [booking.client_id]);
+    const materials = await all('SELECT * FROM material_issues WHERE client_id = ? AND event_session_id = ?', [booking.client_id, viewingSessionId]);
 
     // Fetch related electric bills and parse items
-    const electricBills = await all('SELECT * FROM electric_bills WHERE booking_id = ?', [bookingId]);
+    const electricBills = await all('SELECT * FROM electric_bills WHERE booking_id = ? AND event_session_id = ?', [bookingId, viewingSessionId]);
     electricBills.forEach(bill => {
       try {
         let items = JSON.parse(bill.items_json || '[]');
@@ -203,10 +217,10 @@ router.get('/details-full/:id', async (req, res) => {
     });
 
     // Fetch related shed allocations
-    const shedAllocations = await all('SELECT sa.id, s.name as shed_name, s.rent, sa.allocation_date FROM shed_allocations sa JOIN sheds s ON sa.shed_id = s.id WHERE sa.booking_id = ?', [bookingId]);
+    const shedAllocations = await all('SELECT sa.id, s.name as shed_name, s.rent, sa.allocation_date FROM shed_allocations sa JOIN sheds s ON sa.shed_id = s.id WHERE sa.booking_id = ? AND sa.event_session_id = ?', [bookingId, viewingSessionId]);
 
     // Fetch related payments and determine type
-    const paymentsRaw = await all('SELECT * FROM payments WHERE booking_id = ? ORDER BY payment_date DESC', [bookingId]);
+    const paymentsRaw = await all('SELECT * FROM payments WHERE booking_id = ? AND event_session_id = ? ORDER BY payment_date DESC', [bookingId, viewingSessionId]);
     booking.payments = paymentsRaw.map(p => {
       let type = 'Unknown';
       let amount = 0;
@@ -230,11 +244,11 @@ router.get('/details-full/:id', async (req, res) => {
     const rentCharged = (booking.rent_amount || 0);
     const electricCharged = electricBills.reduce((sum, bill) => sum + (bill.total_amount || 0), 0);
     const materialCharged = materials.reduce((sum, issue) => sum + (issue.total_payable || 0), 0);
-    const shedRentFromAllocation = (await get('SELECT SUM(s.rent) as total FROM shed_allocations sa JOIN sheds s ON sa.shed_id = s.id WHERE sa.booking_id = ?', [bookingId]))?.total || 0;
+    const shedRentFromAllocation = (await get('SELECT SUM(s.rent) as total FROM shed_allocations sa JOIN sheds s ON sa.shed_id = s.id WHERE sa.booking_id = ? AND sa.event_session_id = ?', [bookingId, viewingSessionId]))?.total || 0;
     const shedCharged = shedRentFromAllocation;
     
     // 2. Calculate total payments for each category (using the raw query result)
-    const payments = await get('SELECT SUM(rent_paid) as rent, SUM(electric_paid) as electric, SUM(material_paid) as material, SUM(shed_paid) as shed FROM payments WHERE booking_id = ?', [bookingId]);
+    const payments = await get('SELECT SUM(rent_paid) as rent, SUM(electric_paid) as electric, SUM(material_paid) as material, SUM(shed_paid) as shed FROM payments WHERE booking_id = ? AND event_session_id = ?', [bookingId, viewingSessionId]);
     const rentPaid = (payments?.rent || 0) + (booking.advance_amount || 0); // Include advance in rent paid
     const electricPaid = payments?.electric || 0;
     const materialPaid = payments?.material || 0;
@@ -267,8 +281,9 @@ router.get('/details-full/:id', async (req, res) => {
 // GET: Redirect from a space ID to its latest booking's full detail page
 router.get('/details-full-by-space/:space_id', async (req, res) => {
   const spaceId = req.params.space_id;
+  const viewingSessionId = res.locals.viewingSession.id;
   try {
-    const booking = await get('SELECT id FROM bookings WHERE space_id = ? ORDER BY booking_date DESC LIMIT 1', [spaceId]);
+    const booking = await get('SELECT id FROM bookings WHERE space_id = ? AND event_session_id = ? ORDER BY booking_date DESC LIMIT 1', [spaceId, viewingSessionId]);
     if (booking) {
       res.redirect(`/booking/details-full/${booking.id}`);
     } else {
@@ -297,6 +312,12 @@ router.get('/edit/:id', async (req, res) => {
 // POST: Update a booking
 router.post('/edit/:id', async (req, res) => {
   const bookingId = req.params.id;
+
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    req.session.flash = { type: 'warning', message: 'Cannot edit data in an archived session.' };
+    return res.redirect(`/booking/details-full/${bookingId}`);
+  }
+
   const { exhibitor_name, facia_name, product_category, contact_person, full_address, contact_number, secondary_number, id_proof, rent_amount, discount, advance_amount, due_amount, form_submitted } = req.body;
 
   if (!exhibitor_name || !contact_person || !contact_number) {
@@ -406,7 +427,7 @@ router.get('/receipt/:id', async (req, res) => {
       s.size AS space_size
     FROM bookings b
     JOIN clients c ON b.client_id = c.id
-    JOIN spaces s ON b.space_id = s.id
+    JOIN spaces s ON b.space_id = s.id 
     WHERE b.id = ?
   `;
   try {
@@ -446,6 +467,12 @@ router.get('/invoice/:id', async (req, res) => {
 // GET: Delete booking
 router.get('/delete/:id', async (req, res) => {
   const bookingId = req.params.id;
+
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    req.session.flash = { type: 'warning', message: 'Cannot delete data from an archived session.' };
+    return res.redirect('/booking/list');
+  }
+
   try {
     // Find the space_id before deleting the booking
     const booking = await get('SELECT space_id FROM bookings WHERE id = ?', [bookingId]);
@@ -455,7 +482,6 @@ router.get('/delete/:id', async (req, res) => {
     db.serialize(async () => {
       db.run('BEGIN TRANSACTION');
       await run('DELETE FROM bookings WHERE id = ?', [bookingId]);
-      await run('UPDATE spaces SET status = "Available" WHERE id = ?', [booking.space_id]);
       db.run('COMMIT');
       res.redirect('/booking/list');
     });
