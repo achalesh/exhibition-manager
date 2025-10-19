@@ -231,6 +231,7 @@ async function setupDatabase() {
     electric_paid REAL DEFAULT 0,
     material_paid REAL DEFAULT 0,
     shed_paid REAL DEFAULT 0,
+    event_session_id INTEGER REFERENCES event_sessions(id),
     FOREIGN KEY (booking_id) REFERENCES bookings(id)
   )`);
 

@@ -1,9 +1,15 @@
 <%- include('partials/header') %>
 
+<%
+  // Determine if the page should be read-only.
+  // Data cannot be modified when viewing an archived session.
+  const isReadOnly = viewingSession.id !== activeSession.id;
+%>
+
 <div class="container mt-4">
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h2><%= title %></h2>
-    <a href="/staff/add" class="btn btn-primary">Add New Staff</a>
+    <a href="/staff/add" class="btn btn-primary <%= isReadOnly ? 'disabled' : '' %>">Add New Staff</a>
   </div>
 
   <!-- Role Filter Dropdown -->
@@ -51,9 +57,15 @@
                 <td><%= person.aadhaar || 'N/A' %></td>
                 <td><%= person.address || 'N/A' %></td>
                 <td>
-                  <a href="/staff/id-card/<%= person.id %>" target="_blank" class="btn btn-sm btn-info">
-                    Print ID
-                  </a>
+                  <div class="d-flex flex-wrap gap-1">
+                    <a href="/staff/edit/<%= person.id %>" class="btn btn-sm btn-primary <%= isReadOnly ? 'disabled' : '' %>">Edit</a>
+                    <form action="/staff/delete/<%= person.id %>" method="POST" onsubmit="return confirm('Are you sure you want to delete this staff member? This cannot be undone.');" class="d-inline">
+                      <button type="submit" class="btn btn-sm btn-danger" <%= isReadOnly ? 'disabled' : '' %>>Delete</button>
+                    </form>
+                    <a href="/staff/id-card/<%= person.id %>" target="_blank" class="btn btn-sm btn-info">
+                      ID Card
+                    </a>
+                  </div>
                 </td>
               </tr>
             <% }); %>

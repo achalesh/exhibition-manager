@@ -74,10 +74,33 @@ async function logAction(userId, username, action, details = null) {
   }
 }
 
+/**
+ * Executes a series of database operations as a transaction.
+ * The callback can use the regular `run`, `get`, `all` helpers.
+ * @param {Function} callback - An async function containing the database operations.
+ */
+async function transaction(callback) {
+  try {
+    await run('BEGIN TRANSACTION');
+    await callback({ run, get, all }); // Pass helpers to the callback
+    await run('COMMIT');
+  } catch (err) {
+    console.error('Transaction failed, rolling back.', err);
+    try {
+      await run('ROLLBACK');
+    } catch (rollbackErr) {
+      console.error('Failed to rollback transaction:', rollbackErr);
+    }
+    // Re-throw the original error to be caught by the route handler
+    throw err;
+  }
+}
+
 module.exports = {
   db, // Export the raw db object for .run() and .serialize()
   all,
   get,
   run,
   logAction,
+  transaction,
 };

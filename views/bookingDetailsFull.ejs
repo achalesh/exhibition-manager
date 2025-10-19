@@ -1,260 +1,244 @@
 <%- include('partials/header') %>
 
-<div class="card">
-    <div class="card-header pb-0">
-        <div class="d-flex justify-content-between align-items-start">
-            <div>
-                <h3 class="mb-2"><%= title %> - <span class="text-primary fw-bold"><%= booking.space_name %></span></h3>
-                <a href="/booking/edit/<%= booking.id %>" class="btn btn-sm btn-outline-primary mb-2"><i class="fas fa-edit"></i> Edit Booking Details</a>
-            </div>
-            <div class="text-end">
-                <div class="btn-group">
-                    <% if (previousId) { %>
-                        <a href="/booking/details-full/<%= previousId %>" class="btn btn-outline-secondary"><i class="fas fa-arrow-left"></i> Back</a>
-                    <% } %>
-                    <% if (nextId) { %>
-                        <a href="/booking/details-full/<%= nextId %>" class="btn btn-outline-secondary">Next <i class="fas fa-arrow-right"></i></a>
-                    <% } %>
-                </div>
-            </div>
-        </div>
+<%
+  // Determine if the page should be read-only.
+  const isReadOnly = viewingSession.id !== activeSession.id;
+%>
+
+<div class="container-fluid">
+  <!-- Navigation -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <a href="/booking/list" class="btn btn-outline-secondary btn-sm">« Back to Booking List</a>
+    </div>
+    <div>
+      <% if (previousId) { %>
+        <a href="/booking/details-full/<%= previousId %>" class="btn btn-secondary btn-sm">← Previous</a>
+      <% } %>
+      <% if (nextId) { %>
+        <a href="/booking/details-full/<%= nextId %>" class="btn btn-secondary btn-sm">Next →</a>
+      <% } %>
+    </div>
+  </div>
+
+  <!-- Exhibitor Details Card -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+      <h4 class="mb-0">Exhibitor Details: <%= booking.exhibitor_name %></h4>
+      <div class="no-print">
+        <a href="/booking/edit/<%= booking.id %>" class="btn btn-light btn-sm <%= isReadOnly ? 'disabled' : '' %>"><i class="bi bi-pencil-square me-1"></i> Edit Booking</a>
+        <button onclick="window.print()" class="btn btn-light btn-sm"><i class="bi bi-printer-fill me-1"></i> Print</button>
+      </div>
     </div>
     <div class="card-body">
-        <!-- Booking Details Section -->
-        <div class="row">
-            <div class="col-md-6">
-                <h4>Exhibitor Details</h4>
-                <div class="table-responsive">
-                    <table class="table table-sm table-bordered">
-                        <tr><th style="width: 35%;">Exhibitor Name</th><td><%= booking.exhibitor_name %></td></tr>
-                        <tr><th>Facia Name</th><td><%= booking.facia_name || 'N/A' %></td></tr>
-                        <tr><th>Product Category</th><td><%= booking.product_category || 'N/A' %></td></tr>
-                        <tr><th>Contact Person</th><td><%= booking.contact_person %></td></tr>
-                        <tr><th>Contact Number</th><td><%= booking.contact_number %> <%= booking.secondary_number ? ` / ${booking.secondary_number}` : '' %></td></tr>
-                        <tr><th>Address</th><td><%= booking.full_address || 'N/A' %></td></tr>
-                    </table>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <h4>Booking & Space Details</h4>
-                <div class="table-responsive">
-                    <table class="table table-sm table-bordered">
-                        <tr><th style="width: 35%;">Space Name</th><td><%= booking.space_name %> (<%= booking.space_type %>)</td></tr>
-                        <tr><th>Booking Date</th><td><%= new Date(booking.booking_date).toLocaleDateString() %></td></tr>
-                        <tr><th>Form Submitted</th><td><span class="badge <%= booking.form_submitted ? 'bg-success' : 'bg-danger' %>"><%= booking.form_submitted ? 'Yes' : 'No' %></span></td></tr>
-                        <tr><th>ID Proof</th><td><%= booking.id_proof || 'N/A' %></td></tr>
-                    </table>
-                </div>
-            </div>
+      <div class="row">
+        <div class="col-md-6">
+          <p><strong>Facia Name:</strong> <%= booking.facia_name || 'N/A' %></p>
+          <p><strong>Space:</strong> <%= booking.space_name %> (<%= booking.space_type %>)</p>
+          <p><strong>Product Category:</strong> <%= booking.product_category || 'N/A' %></p>
         </div>
-
-        <hr>
-
-        <!-- Financial Summary -->
-        <h4>Financial Summary</h4>
-        <div class="row g-2">
-            <!-- Rent -->
-            <div class="col-md-3">
-                <div class="card text-center mb-3">
-                    <div class="card-header">Rent</div>
-                    <div class="card-body">
-                        <p class="card-text">Charged: <%= booking.financials.rent.charged.toFixed(2) %></p>
-                        <p class="card-text">Paid: <%= booking.financials.rent.paid.toFixed(2) %></p>
-                    </div>
-                    <div class="card-footer fw-bold <%= booking.financials.rent.due > 0 ? 'text-danger' : 'text-success' %>">
-                        Due: <%= booking.financials.rent.due.toFixed(2) %>
-                    </div>
-                </div>
-            </div>
-            <!-- Electric -->
-            <div class="col-md-3">
-                <div class="card text-center mb-3">
-                    <div class="card-header">Electric</div>
-                    <div class="card-body">
-                        <p class="card-text">Charged: <%= booking.financials.electric.charged.toFixed(2) %></p>
-                        <p class="card-text">Paid: <%= booking.financials.electric.paid.toFixed(2) %></p>
-                    </div>
-                    <div class="card-footer fw-bold <%= booking.financials.electric.due > 0 ? 'text-danger' : 'text-success' %>">
-                        Due: <%= booking.financials.electric.due.toFixed(2) %>
-                    </div>
-                </div>
-            </div>
-            <!-- Material -->
-            <div class="col-md-3">
-                <div class="card text-center mb-3">
-                    <div class="card-header">Material</div>
-                    <div class="card-body">
-                        <p class="card-text">Charged: <%= booking.financials.material.charged.toFixed(2) %></p>
-                        <p class="card-text">Paid: <%= booking.financials.material.paid.toFixed(2) %></p>
-                    </div>
-                    <div class="card-footer fw-bold <%= booking.financials.material.due > 0 ? 'text-danger' : 'text-success' %>">
-                        Due: <%= booking.financials.material.due.toFixed(2) %>
-                    </div>
-                </div>
-            </div>
-            <!-- Shed -->
-            <div class="col-md-3">
-                <div class="card text-center mb-3">
-                    <div class="card-header">Shed</div>
-                    <div class="card-body">
-                        <p class="card-text">Charged: <%= booking.financials.shed.charged.toFixed(2) %></p>
-                        <p class="card-text">Paid: <%= booking.financials.shed.paid.toFixed(2) %></p>
-                    </div>
-                    <div class="card-footer fw-bold <%= booking.financials.shed.due > 0 ? 'text-danger' : 'text-success' %>">
-                        Due: <%= booking.financials.shed.due.toFixed(2) %>
-                    </div>
-                </div>
-            </div>
+        <div class="col-md-6">
+          <p><strong>Contact Person:</strong> <%= booking.contact_person %></p>
+          <p><strong>Contact Number:</strong> <%= booking.contact_number %></p>
+          <p><strong>Address:</strong> <%= booking.full_address || 'N/A' %></p>
         </div>
-
-        <hr>
-
-        <!-- Tabs for Payments, Bills, etc. -->
-        <ul class="nav nav-tabs" id="detailsTab" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="payments-tab" data-bs-toggle="tab" data-bs-target="#payments" type="button" role="tab">Payments</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="electric-tab" data-bs-toggle="tab" data-bs-target="#electric" type="button" role="tab">Electric Bills</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="materials-tab" data-bs-toggle="tab" data-bs-target="#materials" type="button" role="tab">Material Issues</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="sheds-tab" data-bs-toggle="tab" data-bs-target="#sheds" type="button" role="tab">Shed Allocations</button>
-            </li>
-        </ul>
-
-        <div class="tab-content" id="detailsTabContent">
-            <!-- Payments Tab -->
-            <div class="tab-pane fade show active p-3" id="payments" role="tabpanel">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h5 class="mb-0">Payment History</h5>
-                    <a href="/charges/add?booking_id=<%= booking.id %>" class="btn btn-sm btn-success"><i class="fas fa-dollar-sign"></i> Receive Payment</a>
-                </div>
-                <div class="table-responsive">
-
-                    <table class="table table-striped mt-2">
-                    <thead><tr><th>Date</th><th>Receipt #</th><th>Type</th><th class="text-end">Amount</th><th>Actions</th></tr></thead>
-                    <tbody>
-                        <% if (booking.payments && booking.payments.length > 0) { %>
-                            <% booking.payments.forEach(p => { %>
-                                <tr>
-                                    <td><%= new Date(p.payment_date).toLocaleDateString() %></td>
-                                    <td><%= p.receipt_number || '-' %></td>
-                                    <td><%= p.type %></td>
-                                    <td class="text-end"><%= p.amount.toFixed(2) %></td>
-                                    <td>
-                                        <a href="/charges/edit/<%= p.id %>" class="btn btn-sm btn-outline-primary">Edit</a>
-                                    </td>
-                                </tr>
-                            <% }); %>
-                        <% } else { %>
-                            <tr><td colspan="5" class="text-center">No payments recorded.</td></tr>
-                        <% } %>
-                    </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Electric Bills Tab -->
-            <div class="tab-pane fade p-3" id="electric" role="tabpanel">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h5 class="mb-0">Electric Bills</h5>
-                    <a href="/electric/add?booking_id=<%= booking.id %>" class="btn btn-sm btn-warning"><i class="fas fa-bolt"></i> New Electric Bill</a>
-                </div>
-                <div class="table-responsive">
-
-                    <table class="table table-striped mt-2">
-                    <thead><tr><th>Date</th><th>Bill #</th><th>Items</th><th class="text-end">Total Amount</th><th>Actions</th></tr></thead>
-                    <tbody>
-                        <% if (electricBills && electricBills.length > 0) { %>
-                            <% electricBills.forEach(bill => { %>
-                                <tr>
-                                    <td><%= new Date(bill.bill_date).toLocaleDateString() %></td>
-                                    <td><%= bill.id %></td>
-                                    <td>
-                                        <% bill.items.forEach(item => { %>
-                                            <div><%= item.name %> (Qty: <%= item.quantity %>)</div>
-                                        <% }); %>
-                                    </td>
-                                    <td class="text-end"><%= bill.total_amount.toFixed(2) %></td>
-                                    <td>
-                                        <a href="/electric/edit/<%= bill.id %>" class="btn btn-sm btn-outline-primary">Edit</a>
-                                    </td>
-                                </tr>
-                            <% }); %>
-                        <% } else { %>
-                            <tr><td colspan="5" class="text-center">No electric bills found.</td></tr>
-                        <% } %>
-                    </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Material Issues Tab -->
-            <div class="tab-pane fade p-3" id="materials" role="tabpanel">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h5 class="mb-0">Material Issues</h5>
-                    <a href="/material/add?booking_id=<%= booking.id %>" class="btn btn-sm btn-info"><i class="fas fa-box"></i> New Material Issue</a>
-                </div>
-                <div class="table-responsive">
-
-                    <table class="table table-striped mt-2">
-                    <thead><tr><th>Date</th><th>Issue #</th><th class="text-end">Total Payable</th><th>Actions</th></tr></thead>
-                    <tbody>
-                        <% if (materials && materials.length > 0) { %>
-                            <% materials.forEach(issue => { %>
-                                <tr>
-                                    <td><%= new Date(issue.issue_date).toLocaleDateString() %></td>
-                                    <td><%= issue.id %></td>
-                                    <td class="text-end"><%= (issue.total_payable || 0).toFixed(2) %></td>
-                                    <td>
-                                        <a href="/material/edit/<%= issue.id %>" class="btn btn-sm btn-outline-primary">Edit</a>
-                                    </td>
-                                </tr>
-                            <% }); %>
-                        <% } else { %>
-                            <tr><td colspan="4" class="text-center">No materials issued.</td></tr>
-                        <% } %>
-                    </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Shed Allocations Tab -->
-            <div class="tab-pane fade p-3" id="sheds" role="tabpanel">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h5 class="mb-0">Shed Allocations</h5>
-                    <a href="/shed/allocate?booking_id=<%= booking.id %>" class="btn btn-sm btn-dark"><i class="fas fa-warehouse"></i> Allocate New Shed</a>
-                </div>
-                <div class="table-responsive">
-
-                    <table class="table table-striped mt-2">
-                    <thead><tr><th>Date</th><th>Shed Name</th><th class="text-end">Rent</th><th>Actions</th></tr></thead>
-                    <tbody>
-                        <% if (shedAllocations && shedAllocations.length > 0) { %>
-                            <% shedAllocations.forEach(alloc => { %>
-                                <tr>
-                                    <td><%= new Date(alloc.allocation_date).toLocaleDateString() %></td>
-                                    <td><%= alloc.shed_name %></td>
-                                    <td class="text-end"><%= (alloc.rent || 0).toFixed(2) %></td>
-                                    <td>
-                                        <form action="/shed/allocation/delete/<%= alloc.id %>" method="POST" onsubmit="return confirm('Are you sure you want to de-allocate this shed?');">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger">De-allocate</button>
-                                        </form>
-                                    </td>
-                                </tr>
-                            <% }); %>
-                        <% } else { %>
-                            <tr><td colspan="4" class="text-center">No sheds allocated.</td></tr>
-                        <% } %>
-                    </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+      </div>
     </div>
+  </div>
+
+  <!-- Financial Summary -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header">
+      <h5 class="mb-0">Financial Summary</h5>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-bordered table-striped mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Category</th>
+            <th class="text-end">Total Charged (₹)</th>
+            <th class="text-end">Total Paid (₹)</th>
+            <th class="text-end">Balance Due (₹)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Rent</td>
+            <td class="text-end"><%= booking.financials.rent.charged.toFixed(2) %></td>
+            <td class="text-end text-success"><%= booking.financials.rent.paid.toFixed(2) %></td>
+            <td class="text-end fw-bold <%= booking.financials.rent.due > 0 ? 'text-danger' : '' %>"><%= booking.financials.rent.due.toFixed(2) %></td>
+          </tr>
+          <tr>
+            <td>Electric</td>
+            <td class="text-end"><%= booking.financials.electric.charged.toFixed(2) %></td>
+            <td class="text-end text-success"><%= booking.financials.electric.paid.toFixed(2) %></td>
+            <td class="text-end fw-bold <%= booking.financials.electric.due > 0 ? 'text-danger' : '' %>"><%= booking.financials.electric.due.toFixed(2) %></td>
+          </tr>
+          <tr>
+            <td>Material</td>
+            <td class="text-end"><%= booking.financials.material.charged.toFixed(2) %></td>
+            <td class="text-end text-success"><%= booking.financials.material.paid.toFixed(2) %></td>
+            <td class="text-end fw-bold <%= booking.financials.material.due > 0 ? 'text-danger' : '' %>"><%= booking.financials.material.due.toFixed(2) %></td>
+          </tr>
+          <tr>
+            <td>Shed</td>
+            <td class="text-end"><%= booking.financials.shed.charged.toFixed(2) %></td>
+            <td class="text-end text-success"><%= booking.financials.shed.paid.toFixed(2) %></td>
+            <td class="text-end fw-bold <%= booking.financials.shed.due > 0 ? 'text-danger' : '' %>"><%= booking.financials.shed.due.toFixed(2) %></td>
+          </tr>
+        </tbody>
+        <tfoot class="table-dark">
+          <%
+            const grandTotalCharged = booking.financials.rent.charged + booking.financials.electric.charged + booking.financials.material.charged + booking.financials.shed.charged;
+            const grandTotalPaid = booking.financials.rent.paid + booking.financials.electric.paid + booking.financials.material.paid + booking.financials.shed.paid;
+            const grandTotalDue = grandTotalCharged - grandTotalPaid;
+          %>
+          <tr>
+            <td class="text-end"><strong>Grand Total</strong></td>
+            <td class="text-end"><strong><%= grandTotalCharged.toFixed(2) %></strong></td>
+            <td class="text-end"><strong><%= grandTotalPaid.toFixed(2) %></strong></td>
+            <td class="text-end fw-bold <%= grandTotalDue > 0 ? 'text-danger' : '' %>"><strong><%= grandTotalDue.toFixed(2) %></strong></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- Payment History -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">Payment History</h5>
+      <a href="/charges/add?booking_id=<%= booking.id %>" class="btn btn-success btn-sm no-print <%= isReadOnly ? 'disabled' : '' %>"><i class="bi bi-plus-circle me-1"></i> Add Payment</a>
+    </div>
+    <div class="card-body">
+      <table class="table table-striped">
+        <thead class="table-light">
+          <tr>
+            <th>Date</th>
+            <th>Receipt No.</th>
+            <th>Type</th>
+            <th class="text-end">Amount (₹)</th>
+            <th class="no-print">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (booking.advance_amount > 0) { %>
+            <tr>
+              <td><%= new Date(booking.booking_date).toLocaleDateString() %></td>
+              <td>ADVANCE</td>
+              <td>Rent</td>
+              <td class="text-end"><%= booking.advance_amount.toFixed(2) %></td>
+              <td class="no-print">---</td>
+            </tr>
+          <% } %>
+          <% if (booking.payments && booking.payments.length > 0) { %>
+            <% booking.payments.forEach(p => { %>
+              <tr>
+                <td><%= new Date(p.payment_date).toLocaleDateString() %></td>
+                <td><%= p.receipt_number || 'N/A' %></td>
+                <td><%= p.type %></td>
+                <td class="text-end"><%= p.amount.toFixed(2) %></td>
+                <td class="no-print">
+                  <div class="d-flex gap-2">
+                    <a href="/charges/receipt/<%= p.id %>" target="_blank" class="btn btn-sm btn-info">Receipt</a>
+                    <a href="/charges/edit/<%= p.id %>" class="btn btn-sm btn-primary <%= isReadOnly ? 'disabled' : '' %>">Edit</a>
+                    <form action="/charges/delete/<%= p.id %>" method="POST" onsubmit="return confirm('Are you sure you want to delete this payment? This action cannot be undone.');">
+                      <button type="submit" class="btn btn-sm btn-danger" <%= isReadOnly ? 'disabled' : '' %>>Delete</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            <% }) %>
+          <% } else if (booking.advance_amount <= 0) { %>
+            <tr>
+              <td colspan="5" class="text-center text-muted">No payments recorded yet.</td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Electric Bills -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">Electric Bills</h5>
+      <a href="/electric/add?booking_id=<%= booking.id %>" class="btn btn-success btn-sm no-print <%= isReadOnly ? 'disabled' : '' %>"><i class="bi bi-plus-circle me-1"></i> Add Bill</a>
+    </div>
+    <div class="card-body">
+      <% if (electricBills && electricBills.length > 0) { %>
+        <% electricBills.forEach(bill => { %>
+          <div class="border p-3 mb-3 rounded">
+            <div class="d-flex justify-content-between">
+              <h6>Bill #<%= bill.sl_no || bill.id %> - Date: <%= new Date(bill.bill_date).toLocaleDateString() %></h6>
+              <div class="no-print">
+                <a href="/electric/edit/<%= bill.id %>" class="btn btn-sm btn-primary <%= isReadOnly ? 'disabled' : '' %>">Edit</a>
+                <form action="/electric/delete/<%= bill.id %>" method="POST" class="d-inline" onsubmit="return confirm('Are you sure?');">
+                  <button type="submit" class="btn btn-sm btn-danger" <%= isReadOnly ? 'disabled' : '' %>>Delete</button>
+                </form>
+              </div>
+            </div>
+            <ul>
+              <% bill.items.forEach(item => { %>
+                <li><%= item.name %>: <%= item.quantity %> x ₹<%= item.rate %> = ₹<%= item.total %></li>
+              <% }) %>
+            </ul>
+            <p class="text-end fw-bold">Total: ₹<%= bill.total_amount.toFixed(2) %></p>
+          </div>
+        <% }) %>
+      <% } else { %>
+        <p class="text-muted">No electric bills issued.</p>
+      <% } %>
+    </div>
+  </div>
+
+  <!-- Material Issues -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">Material Issues</h5>
+      <a href="/material/issue?client_id=<%= booking.client_id %>" class="btn btn-success btn-sm no-print <%= isReadOnly ? 'disabled' : '' %>"><i class="bi bi-plus-circle me-1"></i> Add Issue</a>
+    </div>
+    <div class="card-body">
+      <% if (materials && materials.length > 0) { %>
+        <% materials.forEach(issue => { %>
+          <div class="border p-3 mb-3 rounded">
+            <div class="d-flex justify-content-between">
+              <h6>Issue #<%= issue.sl_no || issue.id %> - Date: <%= new Date(issue.issue_date).toLocaleDateString() %></h6>
+              <a href="/material/edit/<%= issue.id %>" class="btn btn-sm btn-primary no-print <%= isReadOnly ? 'disabled' : '' %>">Edit</a>
+            </div>
+            <p><strong>Total Payable:</strong> ₹<%= (issue.total_payable || 0).toFixed(2) %></p>
+          </div>
+        <% }) %>
+      <% } else { %>
+        <p class="text-muted">No materials issued.</p>
+      <% } %>
+    </div>
+  </div>
+
+  <!-- Shed Allocations -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">Shed Allocations</h5>
+      <a href="/shed/allocate?booking_id=<%= booking.id %>" class="btn btn-success btn-sm no-print <%= isReadOnly ? 'disabled' : '' %>"><i class="bi bi-plus-circle me-1"></i> Allocate Shed</a>
+    </div>
+    <div class="card-body">
+      <% if (shedAllocations && shedAllocations.length > 0) { %>
+        <ul class="list-group">
+          <% shedAllocations.forEach(alloc => { %>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+              <span><strong><%= alloc.shed_name %></strong> (Rent: ₹<%= alloc.rent.toFixed(2) %>) - Allocated on <%= new Date(alloc.allocation_date).toLocaleDateString() %></span>
+              <form action="/shed/allocation/delete/<%= alloc.id %>" method="POST" class="d-inline no-print" onsubmit="return confirm('Are you sure?');">
+                <button type="submit" class="btn btn-sm btn-danger" <%= isReadOnly ? 'disabled' : '' %>>De-allocate</button>
+              </form>
+            </li>
+          <% }) %>
+        </ul>
+      <% } else { %>
+        <p class="text-muted">No sheds allocated.</p>
+      <% } %>
+    </div>
+  </div>
+
 </div>
 
 <%- include('partials/footer') %>

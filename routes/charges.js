@@ -7,12 +7,21 @@ router.get('/add', async (req, res) => {
   try {
     // Fetch all bookings to populate the exhibitor dropdown
     const bookings = await all(`
-      SELECT b.id, b.exhibitor_name, s.name as space_name 
+      SELECT b.id, b.exhibitor_name, b.facia_name, s.name as space_name 
       FROM bookings b
       JOIN spaces s ON b.space_id = s.id
       ORDER BY b.exhibitor_name
     `);
-    res.render('addCharges', { title: 'Receive Payment', bookings });
+
+    // Fetch the last receipt number to suggest the next one.
+    // This assumes receipt numbers are numeric. It casts them to an integer for correct sorting.
+    const lastReceipt = await get(`SELECT MAX(CAST(receipt_number AS INTEGER)) as max_receipt FROM payments`);
+    const nextReceiptNumber = (lastReceipt?.max_receipt || 0) + 1;
+
+    res.render('addCharges', { 
+      title: 'Receive Payment', 
+      bookings, lastPaymentId: req.query.last_payment_id || null,
+      nextReceiptNumber });
   } catch (err) {
     console.error('Error loading add charges page:', err.message);
     res.status(500).send('Error loading page.');
@@ -67,7 +76,6 @@ router.post('/add', async (req, res) => {
 
   if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
     req.session.flash = { type: 'warning', message: 'Cannot add payments to an archived session.' };
-    // Redirect back to the form, preserving the selected booking if possible
     return res.redirect(`/charges/add${booking_id ? '?booking_id=' + booking_id : ''}`);
   }
 
@@ -79,7 +87,6 @@ router.post('/add', async (req, res) => {
   const upiAmount = parseFloat(upi_paid) || 0;
   const totalPaid = cashAmount + upiAmount;
 
-  // Determine payment mode based on which field has a value
   const payment_mode = cashAmount > 0 && upiAmount > 0 ? 'Cash & UPI' : (cashAmount > 0 ? 'Cash' : 'UPI');
 
   if (totalPaid <= 0) {
@@ -92,12 +99,14 @@ router.post('/add', async (req, res) => {
     return res.status(400).send('Invalid payment type specified.');
   }
 
+  const activeSessionId = res.locals.activeSession.id;
   try {
-    // The transaction helper would automatically handle BEGIN, COMMIT, and ROLLBACK
-    await transaction(async (db) => { // The helper passes a DB object to run queries on
+    let newPaymentId;
+    await transaction(async (db) => {
         // 1. Insert the detailed payment record
-        const paymentSql = `INSERT INTO payments (booking_id, receipt_number, payment_date, payment_mode, cash_paid, upi_paid, ${targetCol}) VALUES (?, ?, ?, ?, ?, ?, ?)`;
-        const { lastID: paymentId } = await db.run(paymentSql, [booking_id, receipt_number, payment_date, payment_mode, cashAmount, upiAmount, totalPaid]);
+        const paymentSql = `INSERT INTO payments (booking_id, receipt_number, payment_date, payment_mode, cash_paid, upi_paid, ${targetCol}, event_session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+        const { lastID: paymentId } = await db.run(paymentSql, [booking_id, receipt_number, payment_date, payment_mode, cashAmount, upiAmount, totalPaid, activeSessionId]);
+        newPaymentId = paymentId; // Capture the new ID
 
         // 2. Update the master due_amount on the bookings table
         await db.run('UPDATE bookings SET due_amount = due_amount - ? WHERE id = ?', [totalPaid, booking_id]);
@@ -112,11 +121,11 @@ router.post('/add', async (req, res) => {
         };
         const accountingCategory = categories[payment_type] || 'Booking Payment';
         const accountingDescription = `Payment from ${booking.exhibitor_name}`;
-        const accountingSql = `INSERT INTO accounting_transactions (payment_id, transaction_type, category, description, amount, transaction_date, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)`;
-        await db.run(accountingSql, [paymentId, 'income', accountingCategory, accountingDescription, totalPaid, payment_date, req.session.user.id]);
+        const accountingSql = `INSERT INTO accounting_transactions (payment_id, transaction_type, category, description, amount, transaction_date, user_id, event_session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+        await db.run(accountingSql, [paymentId, 'income', accountingCategory, accountingDescription, totalPaid, payment_date, req.session.user.id, activeSessionId]);
     });
     // Redirect back to the page with the same exhibitor selected
-    res.redirect(`/charges/add?booking_id=${booking_id}`);
+    res.redirect(`/charges/add?booking_id=${booking_id}&last_payment_id=${newPaymentId}`);
   } catch (err) {
     console.error(`Error processing payment for booking ${booking_id}:`, err.message);
     res.status(500).send('Failed to process payment.');
@@ -222,27 +231,24 @@ router.post('/delete/:id', async (req, res) => {
     return res.redirect(`/booking/details-full/${payment.booking_id}`);
   }
 
-  db.serialize(async () => {
-    try {
-      db.run('BEGIN TRANSACTION');
-      const payment = await get('SELECT * FROM payments WHERE id = ?', [paymentId]);
-      if (!payment) throw new Error('Payment not found.');
+  try {
+    let bookingIdToRedirect;
+    await transaction(async (db) => {
+        const payment = await db.get('SELECT * FROM payments WHERE id = ?', [paymentId]);
+        if (!payment) throw new Error('Payment not found.');
+        bookingIdToRedirect = payment.booking_id;
 
-      const totalPaid = payment.rent_paid + payment.electric_paid + payment.material_paid + payment.shed_paid;
-      await run('UPDATE bookings SET due_amount = due_amount + ? WHERE id = ?', [totalPaid, payment.booking_id]);
+        const totalPaid = payment.rent_paid + payment.electric_paid + payment.material_paid + payment.shed_paid;
+        await db.run('UPDATE bookings SET due_amount = due_amount + ? WHERE id = ?', [totalPaid, payment.booking_id]);
 
-      // Delete the corresponding accounting transaction
-      await run('DELETE FROM accounting_transactions WHERE payment_id = ?', [paymentId]);
-
-      await run('DELETE FROM payments WHERE id = ?', [paymentId]);
-      db.run('COMMIT');
-      res.redirect(`/booking/details-full/${payment.booking_id}`);
-    } catch (err) {
-      db.run('ROLLBACK');
-      console.error(`Error deleting payment #${paymentId}:`, err.message);
-      res.status(500).send('Failed to delete payment.');
-    }
-  });
+        await db.run('DELETE FROM accounting_transactions WHERE payment_id = ?', [paymentId]);
+        await db.run('DELETE FROM payments WHERE id = ?', [paymentId]);
+    });
+    res.redirect(`/booking/details-full/${bookingIdToRedirect}`);
+  } catch (err) {
+    console.error(`Error deleting payment #${paymentId}:`, err.message);
+    res.status(500).send('Failed to delete payment.');
+  }
 });
 
 const isAdmin = (req, res, next) => {
@@ -315,6 +321,34 @@ router.post('/reject/:edit_id', isAdmin, async (req, res) => {
   const { rejection_reason } = req.body;
   await run(`UPDATE payment_edits SET status = 'rejected', rejection_reason = ? WHERE id = ?`, [rejection_reason, editId]);
   res.redirect('/dashboard?message=Payment edit has been rejected.');
+});
+
+
+// GET /charges/receipt/:id - Show a printable receipt for a payment
+router.get('/receipt/:id', async (req, res) => {
+  const paymentId = req.params.id;
+  try {
+    const payment = await get(`
+      SELECT 
+        p.*,
+        b.exhibitor_name,
+        b.facia_name,
+        s.name as space_name
+      FROM payments p
+      JOIN bookings b ON p.booking_id = b.id
+      JOIN spaces s ON b.space_id = s.id
+      WHERE p.id = ?
+    `, [paymentId]);
+
+    if (!payment) {
+      return res.status(404).send('Payment receipt not found.');
+    }
+
+    res.render('paymentReceipt', { title: `Receipt #${payment.receipt_number || payment.id}`, payment });
+  } catch (err) {
+    console.error('Error generating payment receipt:', err);
+    res.status(500).send('Error generating receipt.');
+  }
 });
 
 module.exports = router;

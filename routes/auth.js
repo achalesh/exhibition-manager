@@ -18,4 +18,26 @@ function isAdmin(req, res, next) {
   res.status(403).send('Access Denied: Administrator access required.');
 }
 
-module.exports = { isAuthenticated, isAdmin };
+/**
+ * Middleware to check if a user has one of the allowed roles.
+ * Admins are always allowed.
+ * @param {string[]} allowedRoles - An array of role strings that are allowed access.
+ */
+function hasRole(allowedRoles) {
+  return (req, res, next) => {
+    const user = req.session.user;
+
+    if (!user) {
+      return res.status(403).send('Access Denied.');
+    }
+
+    // Admin has access to everything
+    if (user.role === 'admin' || allowedRoles.includes(user.role)) {
+      return next();
+    }
+
+    return res.status(403).send('Access Denied: You do not have the required permissions.');
+  };
+}
+
+module.exports = { isAuthenticated, isAdmin, hasRole };

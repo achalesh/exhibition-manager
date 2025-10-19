@@ -73,7 +73,7 @@ app.use((req, res, next) => {
 app.use(sessionHandler);
 
 // --- Protected Routes ---
-const { isAuthenticated } = require('./routes/auth');
+const { isAuthenticated, hasRole, isAdmin } = require('./routes/auth');
 
 // --- Public Routes ---
 // The auth routes for login/logout should be defined in a separate file or here.
@@ -81,20 +81,21 @@ const { isAuthenticated } = require('./routes/auth');
 app.use('/', require('./routes/authRoutes')); // We will create this file.
 
 // Route usage
-app.use('/space', isAuthenticated, spaceRoutes);
-app.use('/booking', isAuthenticated, bookingRoutes);
-app.use('/electric', isAuthenticated, electricRoutes);
-app.use('/material', isAuthenticated, materialRoutes);
-app.use('/settings', isAuthenticated, settingsRoutes);
-app.use('/charges', isAuthenticated, chargesRoutes);
-app.use('/shed', isAuthenticated, shedRoutes);
-app.use('/report', isAuthenticated, reportRoutes);
-app.use('/staff', isAuthenticated, staffRoutes);
-app.use('/users', isAuthenticated, userRoutes);
+app.use('/space', isAuthenticated, hasRole(['booking_manager']), spaceRoutes);
+app.use('/booking', isAuthenticated, hasRole(['booking_manager']), bookingRoutes);
+app.use('/electric', isAuthenticated, hasRole(['booking_manager']), electricRoutes);
+app.use('/material', isAuthenticated, hasRole(['booking_manager']), materialRoutes);
+app.use('/charges', isAuthenticated, hasRole(['accountant']), chargesRoutes);
+app.use('/shed', isAuthenticated, hasRole(['booking_manager']), shedRoutes);
+app.use('/staff', isAuthenticated, hasRole(['booking_manager']), staffRoutes);
+app.use('/ticketing', isAuthenticated, hasRole(['ticketing_manager']), ticketingRoutes);
+app.use('/accounting', isAuthenticated, hasRole(['accountant']), accountingRoutes);
+
+app.use('/report', isAuthenticated, isAdmin, reportRoutes); // Reports for admins only for now
+app.use('/users', isAuthenticated, isAdmin, userRoutes);
+app.use('/sessions', isAuthenticated, isAdmin, sessionRoutes);
+app.use('/settings', isAuthenticated, isAdmin, settingsRoutes);
 app.use('/notification', isAuthenticated, notificationRoutes);
-app.use('/accounting', isAuthenticated, accountingRoutes);
-app.use('/sessions', isAuthenticated, sessionRoutes);
-app.use('/ticketing', isAuthenticated, ticketingRoutes);
 
 // Dashboard route
 app.get('/dashboard', isAuthenticated, async (req, res) => {

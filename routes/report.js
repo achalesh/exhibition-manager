@@ -4,6 +4,14 @@ const { Parser } = require('json2csv');
 const { all, get } = require('../db-helpers');
 const { isAdmin } = require('./auth');
 
+// Use the isAdmin middleware for all report routes
+router.use(isAdmin);
+
+// GET /report - Main reports menu
+router.get('/', (req, res) => {
+  res.render('report', { title: 'Reports' });
+});
+
 // GET /report/payment-received - Show all payments received
 router.get('/payment-received', async (req, res) => {
   try {

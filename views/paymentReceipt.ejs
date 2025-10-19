@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title><%= title %></title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background-color: #f8f9fa;
+    }
+    .receipt-container {
+      max-width: 800px;
+      margin: 2rem auto;
+      border: 1px solid #dee2e6;
+      padding: 2rem;
+      background-color: #fff;
+    }
+    .receipt-header {
+      text-align: center;
+      margin-bottom: 2rem;
+      border-bottom: 2px solid #000;
+      padding-bottom: 1rem;
+    }
+    .receipt-footer {
+      margin-top: 3rem;
+      text-align: center;
+      font-style: italic;
+    }
+    @media print {
+      @page {
+        size: 10.5cm 18cm;
+        margin: 1cm 0.5cm 0.5cm; /* Top, Horizontal, Bottom */
+      }
+      body {
+        background-color: #fff;
+      }
+      .receipt-container {
+        margin: 0;
+        border: none;
+        padding: 0;
+      }
+      .no-print {
+        display: none;
+      }
+      .receipt-header h2 {
+        font-size: 1.5rem;
+      }
+      .receipt-header h3 {
+        font-size: 1.2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="receipt-container">
+    <div class="receipt-header">
+      <h2><%= viewingSession.name %></h2>
+      <p class="mb-0"><%= viewingSession.address %>, <%= viewingSession.location %></p>
+      <h3>Payment Receipt</h3>
+    </div>
+
+    <div class="row mb-4">
+      <div class="col-6">
+        <strong>Receipt No:</strong> <%= payment.receipt_number || payment.id %><br>
+        <strong>Date:</strong> <%= new Date(payment.payment_date).toLocaleDateString() %>
+      </div>
+      <div class="col-6 text-end">
+        <strong>Received From:</strong><br>
+        <%= payment.exhibitor_name %><br>
+        <%= payment.facia_name ? `(${payment.facia_name})` : '' %><br>
+        Space: <%= payment.space_name %>
+      </div>
+    </div>
+
+    <table class="table table-bordered">
+      <thead class="table-light">
+        <tr>
+          <th>Description</th>
+          <th class="text-end">Amount Paid</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% 
+          let description = 'Payment';
+          let amount = 0;
+          if (payment.rent_paid > 0) { description = 'Rent Payment'; amount = payment.rent_paid; }
+          else if (payment.electric_paid > 0) { description = 'Electric Bill Payment'; amount = payment.electric_paid; }
+          else if (payment.material_paid > 0) { description = 'Material Issue Payment'; amount = payment.material_paid; }
+          else if (payment.shed_paid > 0) { description = 'Shed Rent Payment'; amount = payment.shed_paid; }
+        %>
+        <% if (payment.cash_paid > 0) { %>
+          <tr>
+            <td><%= description %> (Cash)</td>
+            <td class="text-end">₹<%= payment.cash_paid.toFixed(2) %></td>
+          </tr>
+        <% } %>
+        <% if (payment.upi_paid > 0) { %>
+          <tr>
+            <td><%= description %> (UPI)</td>
+            <td class="text-end">₹<%= payment.upi_paid.toFixed(2) %></td>
+          </tr>
+        <% } %>
+      </tbody>
+      <tfoot class="fw-bold">
+        <tr>
+          <td class="text-end">Total Paid</td>
+          <td class="text-end">₹<%= (payment.cash_paid + payment.upi_paid).toFixed(2) %></td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <div class="receipt-footer">
+      <p>This is a computer-generated receipt and does not require a signature.</p>
+      <button class="btn btn-primary no-print" onclick="window.print()">Print Receipt</button>
+    </div>
+  </div>
+</body>
+</html>
