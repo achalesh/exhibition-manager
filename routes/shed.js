@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { db, all, get, run } = require('../db-helpers');
+const { all, get, run, transaction } = require('../db-helpers');
 
 // GET: Show page to manage all sheds (add, edit, delete)
 router.get('/manage', async (req, res) => {
@@ -58,7 +58,7 @@ router.get('/allocate', async (req, res) => {
       all(`SELECT b.id, b.exhibitor_name, s.name as space_name 
            FROM bookings b JOIN spaces s ON b.space_id = s.id 
            WHERE b.event_session_id = ?
-           ORDER BY b.exhibitor_name`),
+           ORDER BY b.exhibitor_name`, [viewingSessionId]),
       // A shed is available if it's not in the shed_allocations table for the current viewing session
       all(`
         SELECT s.* FROM sheds s
@@ -92,27 +92,23 @@ router.post('/allocate', async (req, res) => {
     return res.status(400).send('Exhibitor and Shed must be selected.');
   }
 
-  db.serialize(async () => {
-    try {
-      db.run('BEGIN TRANSACTION');
+  try {
+    await transaction(async (db) => {
+        const shed = await db.get('SELECT rent FROM sheds WHERE id = ?', [shed_id]);
+        if (!shed) throw new Error('Selected shed not found.');
 
-      const shed = await get('SELECT rent FROM sheds WHERE id = ?', [shed_id]);
-      if (!shed) throw new Error('Selected shed not found.');
+        // 1. Create the allocation record
+        await db.run('INSERT INTO shed_allocations (booking_id, shed_id, allocation_date, event_session_id) VALUES (?, ?, date("now"), ?)', [booking_id, shed_id, activeSessionId]);
 
-      // 1. Create the allocation record
-      await run('INSERT INTO shed_allocations (booking_id, shed_id, allocation_date, event_session_id) VALUES (?, ?, date("now"), ?)', [booking_id, shed_id, activeSessionId]);
-
-      // 3. Add the shed rent to the booking's due amount
-      await run('UPDATE bookings SET due_amount = due_amount + ? WHERE id = ?', [shed.rent, booking_id]);
-
-      db.run('COMMIT');
-      res.redirect('/booking/list');
-    } catch (err) {
-      db.run('ROLLBACK');
-      console.error('Error during shed allocation:', err.message);
-      res.status(500).send('Failed to allocate shed.');
-    }
-  });
+        // 2. Add the shed rent to the booking's due amount
+        await db.run('UPDATE bookings SET due_amount = due_amount + ? WHERE id = ?', [shed.rent, booking_id]);
+    });
+    req.session.flash = { type: 'success', message: 'Shed allocated successfully.' };
+    res.redirect('/booking/list');
+  } catch (err) {
+    console.error('Error during shed allocation:', err.message);
+    res.status(500).send('Failed to allocate shed.');
+  }
 });
 
 // POST: Edit an existing shed
