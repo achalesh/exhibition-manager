@@ -87,7 +87,7 @@ app.use('/electric', isAuthenticated, hasRole(['booking_manager']), electricRout
 app.use('/material', isAuthenticated, hasRole(['booking_manager']), materialRoutes);
 app.use('/charges', isAuthenticated, hasRole(['accountant']), chargesRoutes);
 app.use('/shed', isAuthenticated, hasRole(['booking_manager']), shedRoutes);
-app.use('/staff', isAuthenticated, hasRole(['booking_manager']), staffRoutes);
+app.use('/staff', isAuthenticated, isAdmin, staffRoutes);
 app.use('/ticketing', isAuthenticated, hasRole(['ticketing_manager']), ticketingRoutes);
 app.use('/accounting', isAuthenticated, hasRole(['accountant']), accountingRoutes);
 
@@ -116,15 +116,18 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
     // --- Space/Stall Summary Queries (now session-aware) ---
     const categoryQuery = 'SELECT type, COUNT(*) as count FROM spaces GROUP BY type';
     const totalQuery = 'SELECT COUNT(*) as count FROM spaces';
-    const bookedSpacesQuery = get('SELECT COUNT(DISTINCT space_id) as count FROM bookings WHERE event_session_id = ?', [viewingSessionId]);
+    const bookedSpacesQuery = get("SELECT COUNT(DISTINCT space_id) as count FROM bookings WHERE event_session_id = ? AND booking_status = 'active'", [viewingSessionId]);
     const spacesQuery = `
       SELECT 
         s.*, 
         b.facia_name,
-        CASE WHEN b.id IS NOT NULL THEN 'Booked' ELSE 'Available' END as session_status
+        CASE WHEN b.space_id IS NOT NULL THEN 'Booked' ELSE 'Available' END as session_status
       FROM spaces s
-      LEFT JOIN bookings b ON s.id = b.space_id AND b.event_session_id = ?
-      ORDER BY s.type, s.name
+      LEFT JOIN (
+        SELECT space_id, facia_name FROM bookings 
+        WHERE event_session_id = ? AND booking_status = 'active'
+      ) b ON s.id = b.space_id
+      ORDER BY s.type, s.name;
     `;
 
     // --- Financial Summary Queries ---

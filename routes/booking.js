@@ -5,9 +5,15 @@ const { db, all, get, run } = require('../db-helpers');
 // GET: Show unified booking form, load ALL spaces
 router.get('/add', async (req, res) => {
   try {
-    // Fetch spaces and suggestion data in parallel
-    const [spaces, exhibitors, productCategories, faciaNames] = await Promise.all([
-      all('SELECT * FROM spaces ORDER BY type, name'),
+    const viewingSessionId = res.locals.viewingSession.id;
+    // Fetch available spaces and suggestion data in parallel
+    const [availableSpaces, exhibitors, productCategories, faciaNames] = await Promise.all([
+      // Fetch only spaces that are NOT actively booked in the current session.
+      // This is the most direct way to ensure only available spaces are listed.
+      all(`
+        SELECT id, name, type, rent_amount FROM spaces 
+        WHERE id NOT IN (SELECT space_id FROM bookings WHERE event_session_id = ? AND booking_status = 'active')
+        ORDER BY type, name`, [viewingSessionId]),
       all('SELECT DISTINCT name FROM clients ORDER BY name'),
       all('SELECT DISTINCT product_category FROM bookings WHERE product_category IS NOT NULL ORDER BY product_category'),
       all('SELECT DISTINCT facia_name FROM bookings WHERE facia_name IS NOT NULL ORDER BY facia_name')
@@ -15,7 +21,7 @@ router.get('/add', async (req, res) => {
 
     res.render('bookSpace', {
       title: 'Book a Space',
-      spaces: spaces || [],
+      spaces: availableSpaces || [], // Use the correct list of available spaces
       suggestions: {
         exhibitors: exhibitors.map(e => e.name),
         productCategories: productCategories.map(pc => pc.product_category),
@@ -32,7 +38,7 @@ router.get('/add', async (req, res) => {
 router.get('/details/:space_id', async (req, res) => {
   const spaceId = req.params.space_id;
   const sql = `
-    SELECT * FROM bookings WHERE space_id = ? ORDER BY booking_date DESC LIMIT 1
+    SELECT * FROM bookings WHERE space_id = ? AND booking_status = 'active' ORDER BY booking_date DESC LIMIT 1
   `;
   try {
     const booking = await get(sql, [spaceId]);
@@ -60,6 +66,13 @@ router.post('/add', async (req, res) => {
   const formSubmittedStatus = form_submitted ? 1 : 0;
   if (!space_id || !exhibitor_name || !contact_person || !contact_number) { // Basic validation
     return res.status(400).send('Missing required fields: space, exhibitor name, contact person, and contact number are required.');
+  }
+
+  // Check if the space is already actively booked in this session
+  const existingBooking = await get('SELECT id FROM bookings WHERE space_id = ? AND event_session_id = ? AND booking_status = ?', [space_id, activeSessionId, 'active']);
+  if (existingBooking) {
+    req.session.flash = { type: 'danger', message: 'This space is already actively booked. Please vacate the previous exhibitor first.' };
+    return res.redirect('/booking/add');
   }
 
   // Use a transaction to ensure all or nothing is saved
@@ -283,7 +296,7 @@ router.get('/details-full-by-space/:space_id', async (req, res) => {
   const spaceId = req.params.space_id;
   const viewingSessionId = res.locals.viewingSession.id;
   try {
-    const booking = await get('SELECT id FROM bookings WHERE space_id = ? AND event_session_id = ? ORDER BY booking_date DESC LIMIT 1', [spaceId, viewingSessionId]);
+    const booking = await get("SELECT id FROM bookings WHERE space_id = ? AND event_session_id = ? AND booking_status = 'active' ORDER BY booking_date DESC LIMIT 1", [spaceId, viewingSessionId]);
     if (booking) {
       res.redirect(`/booking/details-full/${booking.id}`);
     } else {
@@ -464,6 +477,52 @@ router.get('/invoice/:id', async (req, res) => {
   }
 });
 
+// POST /booking/vacate/:id - Mark a booking as cancelled and reverse charges
+router.post('/vacate/:id', async (req, res) => {
+  const bookingId = req.params.id;
+
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    req.session.flash = { type: 'warning', message: 'Cannot cancel a booking in an archived session.' };
+    return res.redirect(`/booking/details-full/${bookingId}`);
+  }
+
+  // Use a transaction to ensure atomicity
+  db.serialize(async () => {
+    try {
+      db.run('BEGIN TRANSACTION');
+
+      // 1. Get the booking to ensure it's active
+      const booking = await get("SELECT id, client_id, rent_amount, discount, booking_status FROM bookings WHERE id = ?", [bookingId]);
+      if (!booking || booking.booking_status !== 'active') {
+        db.run('ROLLBACK');
+        req.session.flash = { type: 'info', message: 'This booking is not active and cannot be cancelled.' };
+        return res.redirect(`/booking/details-full/${bookingId}`);
+      }
+
+      // 2. Delete associated charge records
+      await run('DELETE FROM electric_bills WHERE booking_id = ?', [bookingId]);
+      // Note: Material issues are linked to client_id, this will delete all for that client in the session.
+      // This is based on the previous logic. If a client can have multiple bookings, this might need refinement.
+      await run('DELETE FROM material_issues WHERE client_id = ? AND event_session_id = ?', [booking.client_id, res.locals.activeSession.id]);
+      await run('DELETE FROM shed_allocations WHERE booking_id = ?', [bookingId]);
+      await run('DELETE FROM shed_bills WHERE booking_id = ?', [bookingId]);
+
+      // 3. Update the booking status and reverse the charges from its due amount
+      // We set due_amount to 0 to clear any remaining rent/discount balance as well.
+      await run("UPDATE bookings SET booking_status = 'cancelled', vacated_date = date('now'), due_amount = 0 WHERE id = ?", [bookingId]);
+
+      db.run('COMMIT');
+      req.session.flash = { type: 'success', message: 'Booking has been cancelled, charges reversed, and space is now available.' };
+      res.redirect(`/booking/details-full/${bookingId}`);
+    } catch (err) {
+      db.run('ROLLBACK');
+      console.error('Error cancelling booking:', err);
+      req.session.flash = { type: 'danger', message: 'Failed to cancel the booking due to a server error.' };
+      res.redirect(`/booking/details-full/${bookingId}`);
+    }
+  });
+});
+
 // GET: Delete booking
 router.get('/delete/:id', async (req, res) => {
   const bookingId = req.params.id;
@@ -489,6 +548,49 @@ router.get('/delete/:id', async (req, res) => {
     console.error("Error deleting booking:", err.message);
     db.run('ROLLBACK');
     res.status(500).send('Error deleting booking.');
+  }
+});
+
+// GET: Report of all cancelled/vacated bookings for the session
+router.get('/report/cancelled', async (req, res) => {
+  try {
+    const viewingSessionId = res.locals.viewingSession.id;
+
+    const cancelledBookings = await all(`
+      SELECT
+        b.id,
+        b.exhibitor_name,
+        s.name AS space_name,
+        b.vacated_date,
+        b.rent_amount AS rent_charged,
+        b.discount,
+        (b.advance_amount + COALESCE(p.total_rent_paid, 0)) AS rent_paid,
+        COALESCE(p.total_electric_paid, 0) AS electric_paid,
+        COALESCE(p.total_material_paid, 0) AS material_paid,
+        COALESCE(p.total_shed_paid, 0) AS shed_paid
+      FROM bookings b
+      JOIN spaces s ON b.space_id = s.id
+      LEFT JOIN (
+        SELECT 
+          booking_id,
+          SUM(rent_paid) as total_rent_paid,
+          SUM(electric_paid) as total_electric_paid,
+          SUM(material_paid) as total_material_paid,
+          SUM(shed_paid) as total_shed_paid
+        FROM payments
+        GROUP BY booking_id
+      ) p ON b.id = p.booking_id
+      WHERE b.event_session_id = ? AND b.booking_status IN ('cancelled', 'vacated')
+      ORDER BY b.vacated_date DESC
+    `, [viewingSessionId]);
+
+    res.render('cancelledBookingsReport', {
+      title: 'Cancelled & Vacated Bookings',
+      bookings: cancelledBookings
+    });
+  } catch (err) {
+    console.error('Error fetching cancelled bookings report:', err.message);
+    res.status(500).send('Failed to generate report.');
   }
 });
 

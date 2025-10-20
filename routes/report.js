@@ -467,4 +467,65 @@ router.get('/audit-log', async (req, res) => {
   }
 });
 
+// GET /report/electric-list - Show a list of all electric bills
+router.get('/electric-list', async (req, res) => {
+  try {
+    const viewingSessionId = res.locals.viewingSession.id;
+    const bills = await all(`
+      SELECT eb.*, b.exhibitor_name, b.facia_name, s.name as space_name
+      FROM electric_bills eb
+      JOIN bookings b ON eb.booking_id = b.id
+      JOIN spaces s ON b.space_id = s.id
+      WHERE eb.event_session_id = ?
+      ORDER BY eb.bill_date DESC, eb.id DESC
+    `, [viewingSessionId]);
+
+    bills.forEach(bill => {
+      try {
+        bill.items = JSON.parse(bill.items_json || '[]');
+        // Handle cases where the JSON is double-stringified
+        if (typeof bill.items === 'string') {
+          bill.items = JSON.parse(bill.items);
+        }
+      } catch (e) {
+        bill.items = [];
+      }
+    });
+
+    res.render('reportElectricList', {
+      title: 'Electric Bills Report',
+      bills
+    });
+  } catch (err) {
+    console.error('Error generating electric bills report:', err);
+    res.status(500).send('Error generating report.');
+  }
+});
+
+// GET /report/shed-list - Show a list of all shed allocations
+router.get('/shed-list', async (req, res) => {
+  try {
+    const viewingSessionId = res.locals.viewingSession.id;
+    const allocations = await all(`
+      SELECT 
+        sa.id, 
+        s.name as shed_name, 
+        s.rent,
+        b.exhibitor_name,
+        b.facia_name,
+        sp.name as space_name
+      FROM shed_allocations sa
+      JOIN sheds s ON sa.shed_id = s.id
+      JOIN bookings b ON sa.booking_id = b.id
+      JOIN spaces sp ON b.space_id = sp.id
+      WHERE sa.event_session_id = ?
+      ORDER BY s.name
+    `, [viewingSessionId]);
+    res.render('reportShedList', { title: 'Shed Allocation Report', allocations });
+  } catch (err) {
+    console.error('Error generating shed allocation report:', err);
+    res.status(500).send('Error generating report.');
+  }
+});
+
 module.exports = router;

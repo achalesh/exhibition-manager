@@ -53,6 +53,30 @@
           <% } %>
           <% if (user && user.role === 'admin') { %>
             <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" id="navbarTicketing" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-ticket-perforated me-1"></i>Ticketing
+              </a>
+              <ul class="dropdown-menu" aria-labelledby="navbarTicketing">
+                <li><a class="dropdown-item" href="/ticketing"><i class="bi bi-bar-chart-line me-2"></i>Sales Dashboard</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="/ticketing/stock"><i class="bi bi-stack me-2"></i>Manage Stock</a></li>
+                <li><a class="dropdown-item" href="/ticketing/distribute"><i class="bi bi-send me-2"></i>Distribute Tickets</a></li>
+                <li><a class="dropdown-item" href="/ticketing/settle"><i class="bi bi-receipt-cutoff me-2"></i>Settle Ticket Books</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="/ticketing/cash-settle"><i class="bi bi-cash-stack me-2"></i>Settle Staff Cash</a></li>
+                <li><a class="dropdown-item" href="/ticketing/cash-settle/review"><i class="bi bi-journal-check me-2"></i>Review Cash Settlements</a></li>
+              </ul>
+            </li>
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" id="navbarReports" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-file-earmark-bar-graph me-1"></i>Reports
+              </a>
+              <ul class="dropdown-menu" aria-labelledby="navbarReports">
+                <li><a class="dropdown-item" href="/report"><i class="bi bi-collection me-2"></i>All Reports</a></li>
+                <li><a class="dropdown-item" href="/booking/report/cancelled"><i class="bi bi-journal-x me-2"></i>Cancelled Bookings</a></li>
+              </ul>
+            </li>
+            <li class="nav-item dropdown">
               <a class="nav-link dropdown-toggle" href="#" id="navbarSettings" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="bi bi-gear-fill me-1"></i>Settings
               </a>
@@ -61,9 +85,6 @@
                 <li><a class="dropdown-item" href="/shed/manage"><i class="bi bi-building-gear me-2"></i>Manage Sheds</a></li>
                 <li><a class="dropdown-item" href="/staff/list"><i class="bi bi-people me-2"></i>Manage Staff</a></li>
                 <li><hr class="dropdown-divider"></li>
-                <li><a class="dropdown-item" href="/report"><i class="bi bi-file-earmark-bar-graph me-2"></i>Reports</a></li>
-                <li><a class="dropdown-item" href="/charges/add"><i class="bi bi-currency-rupee me-2"></i>Receive Payments</a></li>
-                <li><a class="dropdown-item" href="/ticketing"><i class="bi bi-ticket-perforated me-2"></i>Ticketing</a></li>
                 <li><a class="dropdown-item" href="/accounting"><i class="bi bi-calculator me-2"></i>Accounting</a></li>
                 <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item" href="/sessions"><i class="bi bi-map me-2"></i>Manage Sessions</a></li>

@@ -27,6 +27,11 @@
       <h4 class="mb-0">Exhibitor Details: <%= booking.exhibitor_name %></h4>
       <div class="no-print">
         <a href="/booking/edit/<%= booking.id %>" class="btn btn-light btn-sm <%= isReadOnly ? 'disabled' : '' %>"><i class="bi bi-pencil-square me-1"></i> Edit Booking</a>
+        <% if (booking.booking_status === 'active' && !isReadOnly) { %>
+          <form action="/booking/vacate/<%= booking.id %>" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to vacate this space? This will allow it to be re-booked.');">
+            <button type="submit" class="btn btn-warning btn-sm"><i class="bi bi-door-open-fill me-1"></i> Vacate Space</button>
+          </form>
+        <% } %>
         <button onclick="window.print()" class="btn btn-light btn-sm"><i class="bi bi-printer-fill me-1"></i> Print</button>
       </div>
     </div>
@@ -35,6 +40,12 @@
         <div class="col-md-6">
           <p><strong>Facia Name:</strong> <%= booking.facia_name || 'N/A' %></p>
           <p><strong>Space:</strong> <%= booking.space_name %> (<%= booking.space_type %>)</p>
+          <p><strong>Booking Status:</strong> 
+            <span class="badge bg-<%= booking.booking_status === 'active' ? 'success' : 'secondary' %>">
+              <%= booking.booking_status.charAt(0).toUpperCase() + booking.booking_status.slice(1) %>
+            </span>
+            <% if (booking.vacated_date) { %> (on <%= new Date(booking.vacated_date).toLocaleDateString() %>)<% } %>
+          </p>
           <p><strong>Product Category:</strong> <%= booking.product_category || 'N/A' %></p>
         </div>
         <div class="col-md-6">
