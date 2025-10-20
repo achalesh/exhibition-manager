@@ -8,23 +8,15 @@
       <h6 class="m-0 fw-bold text-primary">Edit Ticket Stock #<%= stock.id %></h6>
     </div>
     <div class="card-body">
-      <form action="/ticketing/stock/edit/<%= stock.id %>" method="POST" class="row g-3 align-items-end mb-4">
+      <form action="/ticketing/stock/edit/<%= stock.id %>" method="POST">
+        <div class="row g-3 align-items-end">
         <div class="col-md-3">
-          <label for="rate" class="form-label">Ticket Rate</label>
-          <select id="base_rate_id" name="base_rate_id" class="form-select" required>
-            <option value="1" <%= stock.rate == 100 ? 'selected' : '' %>>100</option>
-            <option value="2" <%= stock.rate == 50 ? 'selected' : '' %>>50</option>
-          </select>
+          <label for="rate" class="form-label">Rate (₹)</label>
+          <input type="number" class="form-control" id="rate" name="rate" step="0.01" value="<%= stock.rate %>" required autofocus>
         </div>
         <div class="col-md-3">
-          <label for="color" class="form-label">Ticket Color</label>
-          <select id="color" name="color" class="form-select" required>
-            <option value="Red" <%= stock.color === 'Red' ? 'selected' : '' %>>Red</option>
-            <option value="Green" <%= stock.color === 'Green' ? 'selected' : '' %>>Green</option>
-            <option value="Blue" <%= stock.color === 'Blue' ? 'selected' : '' %>>Blue</option>
-            <option value="Yellow" <%= stock.color === 'Yellow' ? 'selected' : '' %>>Yellow</option>
-            <option value="Pink" <%= stock.color === 'Pink' ? 'selected' : '' %>>Pink</option>
-          </select>
+          <label for="color" class="form-label">Color</label>
+          <input type="text" class="form-control" id="color" name="color" value="<%= stock.color %>" required>
         </div>
         <div class="col-md-2">
           <label for="start_number" class="form-label">Starting Serial Number</label>
@@ -37,6 +29,7 @@
         <div class="col-md-2">
           <button type="submit" class="btn btn-primary w-100">Update Stock</button>
         </div>
+        </div>
       </form>
     </div>
   </div>
@@ -46,7 +39,7 @@
 
 <script>
   document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('base_rate_id').focus();
+    document.getElementById('rate').focus();
   });
 </script>
 

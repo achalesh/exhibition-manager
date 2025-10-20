@@ -17,10 +17,10 @@
           </div>
           <div class="col-md-3">
             <label for="rate_id" class="form-label">Ticket Type (Ride Name)</label>
-            <select id="rate_id" name="rate_id" class="form-select" required>
+            <select id="ride_id" name="ride_id" class="form-select" required>
               <option value="" disabled selected>Select Ride...</option>
-              <% rates.forEach(rate => { %>
-                <option value="<%= rate.id %>" data-rate="<%= rate.rate %>"><%= rate.name %> (₹<%= rate.rate %>)</option>
+              <% rides.forEach(ride => { %>
+                <option value="<%= ride.id %>" data-rate="<%= ride.rate %>"><%= ride.name %> (₹<%= ride.rate %>)</option>
               <% }) %>
             </select>
           </div>
@@ -49,7 +49,7 @@
 
 <script>
   document.addEventListener('DOMContentLoaded', function() {
-    const rateSelect = document.getElementById('rate_id');
+    const rateSelect = document.getElementById('ride_id');
     const ticketsSoldInput = document.getElementById('tickets_sold');
     const upiInput = document.getElementById('upi_amount');
     const cashDisplay = document.getElementById('cash_amount_display');

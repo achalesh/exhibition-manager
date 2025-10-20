@@ -145,10 +145,6 @@
         const option = document.createElement('option');
         option.value = s.id;
         option.textContent = s.name;
-        if (s.status !== 'Available') {
-          option.disabled = true;
-          option.textContent += ' (Booked)';
-        }
         spaceSelect.appendChild(option);
       }
     });
@@ -176,34 +172,16 @@
 
     let detailsHtml = `<h5 class="card-title">${selectedSpace.name}</h5><p><strong>Type:</strong> ${selectedSpace.type}</p><p><strong>Rent:</strong> ₹${selectedSpace.rent_amount}</p>`;
 
-    if (selectedSpace.status === 'Available') {
-      detailsHtml += `<p><strong>Status:</strong> <span class="badge bg-success">Available</span></p>`;
-      detailsCardBody.innerHTML = detailsHtml;
-      document.getElementById('form_space_id').value = selectedSpace.id;
-      document.getElementById('rent_amount').value = selectedSpace.rent_amount;
-      calculateTotal();
-      bookingForm.style.display = 'block';
-      document.getElementById('exhibitor_name').focus(); // Autofocus on the first field
-    } else {
-      detailsHtml += `<p><strong>Status:</strong> <span class="badge bg-danger">Booked</span></p>`;
-      bookingForm.style.display = 'none';
-      try {
-        const response = await fetch(`/booking/details/${selectedSpace.id}`);
-        if (response.ok) {
-          const bookingDetails = await response.json();
-          if (bookingDetails) {
-            detailsHtml += `<hr><h6>Booking Information</h6>
-              <p><strong>Exhibitor:</strong> ${bookingDetails.exhibitor_name}</p>
-              <p><strong>Contact Person:</strong> ${bookingDetails.contact_person}</p>
-              <p><strong>Contact Number:</strong> ${bookingDetails.contact_number}</p>
-              <p><strong>Booking Date:</strong> ${new Date(bookingDetails.booking_date).toLocaleDateString()}</p>`;
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching booking details:', error);
-      }
-      detailsCardBody.innerHTML = detailsHtml;
-    }
+    // Since this page only loads available spaces, we can always show the form.
+    detailsHtml += `<p><strong>Status:</strong> <span class="badge bg-success">Available</span></p>`;
+    detailsCardBody.innerHTML = detailsHtml;
+
+    // Populate and show the booking form
+    document.getElementById('form_space_id').value = selectedSpace.id;
+    document.getElementById('rent_amount').value = selectedSpace.rent_amount;
+    calculateTotal();
+    bookingForm.style.display = 'block';
+    document.getElementById('exhibitor_name').focus(); // Autofocus on the first field
   }
 
   function calculateTotal() {

@@ -11,16 +11,11 @@
       <form action="/ticketing/rides/add" method="POST" class="row g-3 align-items-end mb-4">
         <div class="col">
           <label for="ride_name" class="form-label">Ride Name (e.g., Ferris Wheel)</label>
-          <input type="text" class="form-control" id="ride_name" name="name" required>
+          <input type="text" class="form-control" id="ride_name" name="name" required autofocus>
         </div>
         <div class="col">
           <label for="ride_rate" class="form-label">Rate (₹)</label>
-          <select id="ride_rate" name="rate" class="form-select" required>
-            <option value="" disabled selected>Choose rate...</option>
-            <% baseRates.forEach(rate => { %>
-              <option value="<%= rate.id %>"><%= rate.rate %></option>
-            <% }) %>
-          </select>
+          <input type="number" class="form-control" id="ride_rate" name="rate" step="0.01" placeholder="e.g. 50.00" required>
         </div>
         <div class="col-auto">
           <button type="submit" class="btn btn-success">Add Ride</button>
