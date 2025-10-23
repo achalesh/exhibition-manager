@@ -18,16 +18,102 @@ const upload = multer({ dest: 'uploads/' });
 router.get('/', isAdmin, async (req, res) => {
   try {
     const activeSessionId = res.locals.activeSession.id;
-    const sales = await all(`
-      SELECT td.*, u.username as settled_by, s.name as staff_name, r.name as ride_name
+    const { start_date, end_date } = req.query;
+
+    let sql = `
+      SELECT td.*, u.username as settled_by, s.name as staff_name, r.name as ride_name, r.rate
       FROM ticket_distributions td
       LEFT JOIN users u ON td.settled_by_user_id = u.id
       LEFT JOIN booking_staff s ON td.staff_id = s.id
       JOIN rides r ON td.ride_id = r.id
-      WHERE td.status = 'Settled' AND td.event_session_id = ?
-      ORDER BY td.settlement_date DESC, td.id DESC
+    `;
+    const params = [activeSessionId];
+    const whereClauses = ["td.status = 'Settled'", "td.event_session_id = ?"];
+
+    if (start_date) {
+      whereClauses.push('td.settlement_date >= ?');
+      params.push(start_date);
+    }
+    if (end_date) {
+      whereClauses.push('td.settlement_date <= ?');
+      params.push(end_date);
+    }
+
+    sql += ` WHERE ${whereClauses.join(' AND ')} ORDER BY td.settlement_date DESC, td.id DESC`;
+
+    const sales = await all(sql, params);
+
+    // Calculate summary stats
+    const summary = sales.reduce((acc, sale) => {
+      acc.total_revenue += sale.calculated_revenue || 0;
+      acc.total_tickets_sold += sale.tickets_sold || 0;
+      acc.total_cash += sale.cash_amount || 0;
+      acc.total_upi += sale.upi_amount || 0;
+      return acc;
+    }, { total_revenue: 0, total_tickets_sold: 0, total_cash: 0, total_upi: 0 });
+
+    // Prepare data for the chart (sales by date)
+    const salesByDate = sales.reduce((acc, sale) => {
+      const date = sale.settlement_date;
+      if (!acc[date]) {
+        acc[date] = 0;
+      }
+      acc[date] += sale.calculated_revenue;
+      return acc;
+    }, {});
+
+    // Prepare data for the full daily sales trend chart (unfiltered)
+    const trendDataRaw = await all(`
+      SELECT settlement_date, SUM(calculated_revenue) as daily_revenue
+      FROM ticket_distributions
+      WHERE event_session_id = ? AND status = 'Settled' AND settlement_date IS NOT NULL
+      GROUP BY settlement_date
+      ORDER BY settlement_date ASC
     `, [activeSessionId]);
-    res.render('ticketing', { title: 'Ticketing Sales Dashboard', sales });
+
+    const trendChartData = {
+      labels: trendDataRaw.map(row => row.settlement_date),
+      data: trendDataRaw.map(row => row.daily_revenue)
+    };
+
+    // Prepare data for sales by ride pie chart
+    const salesByRide = sales.reduce((acc, sale) => {
+      const rideName = sale.ride_name;
+      if (!acc[rideName]) {
+        acc[rideName] = 0;
+      }
+      acc[rideName] += sale.calculated_revenue;
+      return acc;
+    }, {});
+
+    const pieChartData = {
+      labels: Object.keys(salesByRide),
+      data: Object.values(salesByRide)
+    };
+
+    const topRides = Object.entries(salesByRide)
+      .map(([name, revenue]) => ({ name, revenue }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5);
+
+    // Prepare data for sales by staff bar chart
+    const salesByStaff = sales.reduce((acc, sale) => {
+      const staffName = sale.staff_name || 'N/A'; // Handle cases with no staff name
+      if (!acc[staffName]) {
+        acc[staffName] = 0;
+      }
+      acc[staffName] += sale.calculated_revenue;
+      return acc;
+    }, {});
+
+    const staffChartData = {
+      labels: Object.keys(salesByStaff),
+      data: Object.values(salesByStaff)
+    };
+
+    res.render('ticketing', {
+      title: 'Ticketing Sales Dashboard', sales, summary, trendChartData, pieChartData, topRides, staffChartData, filters: { start_date, end_date }
+    });
   } catch (err) {
     console.error('Error loading ticketing page:', err);
     res.status(500).send('Error loading ticketing data.');
@@ -85,13 +171,25 @@ router.post('/rides/toggle-active/:id', isAdmin, async (req, res) => {
 router.get('/stock', isAdmin, async (req, res) => {
   try {
     const activeSessionId = res.locals.activeSession.id;
-    const stock = await all(`
+    const { q } = req.query;
+
+    let sql = `
       SELECT ts.*
       FROM ticket_stock ts
-      WHERE ts.event_session_id = ?
-      ORDER BY ts.rate, ts.start_number
-    `, [activeSessionId]);
-    res.render('ticketingStock', { title: 'Manage Ticket Stock', stock });
+    `;
+    const params = [activeSessionId];
+    const whereClauses = ['ts.event_session_id = ?'];
+
+    if (q) {
+      whereClauses.push('(ts.color LIKE ? OR ts.start_number LIKE ? OR ts.end_number LIKE ?)');
+      params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+    }
+
+    sql += ` WHERE ${whereClauses.join(' AND ')} ORDER BY ts.created_at DESC, ts.rate, ts.start_number`;
+
+    const stock = await all(sql, params);
+
+    res.render('ticketingStock', { title: 'Manage Ticket Stock', stock, filters: { q: q || '' } });
   } catch (err) {
     console.error('Error loading ticket stock page:', err);
     res.status(500).send('Error loading page.');
@@ -183,8 +281,8 @@ router.get('/stock/edit/:id', isAdmin, async (req, res) => {
       req.session.flash = { type: 'danger', message: 'Stock entry not found.' };
       return res.redirect('/ticketing/stock');
     }
-    if (stock.status !== 'Available') {
-      req.session.flash = { type: 'danger', message: 'Cannot edit stock that has already been distributed or used.' };
+    if (stock.status === 'Distributed') {
+      req.session.flash = { type: 'danger', message: 'Cannot edit stock that is currently distributed. Please recall it first.' };
       return res.redirect('/ticketing/stock');
     }
 
@@ -201,7 +299,7 @@ router.post('/stock/edit/:id', isAdmin, async (req, res) => {
   const { rate, color, start_number, end_number } = req.body;
 
   try {
-    await run('UPDATE ticket_stock SET rate = ?, color = ?, start_number = ?, end_number = ? WHERE id = ? AND status = \'Available\'', [parseFloat(rate), color, parseInt(start_number), parseInt(end_number), stockId]);
+    await run('UPDATE ticket_stock SET rate = ?, color = ?, start_number = ?, end_number = ? WHERE id = ? AND (status = \'Available\' OR status = \'Settled\')', [parseFloat(rate), color, parseInt(start_number), parseInt(end_number), stockId]);
     req.session.flash = { type: 'success', message: 'Stock entry updated successfully.' };
   } catch (err) {
     console.error('Error updating stock:', err);
@@ -284,20 +382,19 @@ router.get('/distribute', isAdmin, async (req, res) => {
 
 // POST /ticketing/distribute - Record a new ticket distribution from stock
 router.post('/distribute', isAdmin, async (req, res) => {
-  const { staff_id, ride_id, stock_id } = req.body;
-  if (!staff_id || !ride_id || !stock_id) {
+  const { staff_id, ride_id, stock_id, distribution_date } = req.body;
+  if (!staff_id || !ride_id || !stock_id || !distribution_date) {
     req.session.flash = { type: 'danger', message: 'All fields are required.' };
     return res.redirect('/ticketing/distribute');
   }
   const activeSessionId = res.locals.activeSession.id;
   try {
     const stockItem = await get('SELECT * FROM ticket_stock WHERE id = ?', [stock_id]);
-    // Note: We now store ride_id instead of rate_id
-    const sql = 'INSERT INTO ticket_distributions (distribution_date, staff_id, ride_id, stock_id, distributed_start_number, distributed_end_number, event_session_id) VALUES (date(\'now\'), ?, ?, ?, ?, ?, ?)';
-    await run(sql, [staff_id, ride_id, stock_id, stockItem.start_number, stockItem.end_number, activeSessionId]);
+    const sql = 'INSERT INTO ticket_distributions (distribution_date, staff_id, ride_id, stock_id, distributed_start_number, distributed_end_number, event_session_id) VALUES (?, ?, ?, ?, ?, ?, ?)';
+    await run(sql, [distribution_date, staff_id, ride_id, stock_id, stockItem.start_number, stockItem.end_number, activeSessionId]);
     await run("UPDATE ticket_stock SET status = 'Distributed' WHERE id = ?", [stock_id]);
     req.session.flash = { type: 'success', message: 'Tickets distributed successfully.' };
-    res.redirect('/ticketing/settle'); // Redirect to settlement page to see the new entry
+    res.redirect('/ticketing/distribute');
   } catch (err) {
     console.error('Error distributing tickets:', err);
     req.session.flash = { type: 'danger', message: 'Failed to distribute tickets.' };
@@ -313,14 +410,27 @@ router.get('/distribute/edit/:id', isAdmin, async (req, res) => {
       req.session.flash = { type: 'danger', message: 'This distribution cannot be edited.' };
       return res.redirect('/ticketing/distribute');
     }
-    const [staff, rides] = await Promise.all([
+    const [staff, rides, availableStock] = await Promise.all([
       all('SELECT id, name FROM booking_staff ORDER BY name'),
       all(`
         SELECT id, name, rate
         FROM rides
-        WHERE is_active = 1 ORDER BY name`)
+        WHERE is_active = 1 ORDER BY name`),
+      // Fetch all stock that is either 'Available' or is the one currently assigned to this distribution
+      all(`
+        SELECT ts.id, ts.start_number, ts.end_number, ts.color, ts.rate 
+        FROM ticket_stock ts
+        WHERE (ts.status = 'Available' OR ts.id = ?) AND ts.event_session_id = ?
+        ORDER BY ts.rate, ts.start_number
+      `, [distribution.stock_id, res.locals.activeSession.id])
     ]);
-    res.render('editTicketingDistribution', { title: 'Edit Distribution', distribution, staff, rides });
+    res.render('editTicketingDistribution', {
+      title: 'Edit Distribution',
+      distribution,
+      staff,
+      rides,
+      availableStock
+    });
   } catch (err) {
     console.error('Error loading distribution edit page:', err);
     res.status(500).send('Error loading page.');
@@ -329,12 +439,29 @@ router.get('/distribute/edit/:id', isAdmin, async (req, res) => {
 
 // POST /ticketing/distribute/edit/:id - Update a distribution
 router.post('/distribute/edit/:id', isAdmin, async (req, res) => {
-  const { staff_id, ride_id } = req.body;
+  const distributionId = req.params.id;
+  const { staff_id, ride_id, stock_id } = req.body;
   try {
-    // You might add validation here to ensure the new ride's rate matches the stock's rate
-    await run('UPDATE ticket_distributions SET staff_id = ?, ride_id = ? WHERE id = ? AND status = \'Distributed\'', [staff_id, ride_id, req.params.id]);
+    await run('BEGIN TRANSACTION');
+
+    // Get the original distribution to find the old stock ID
+    const originalDistribution = await get('SELECT stock_id FROM ticket_distributions WHERE id = ?', [distributionId]);
+    const old_stock_id = originalDistribution.stock_id;
+
+    // Release the old stock bundle
+    await run('UPDATE ticket_stock SET status = "Available" WHERE id = ?', [old_stock_id]);
+
+    // Mark the new stock bundle as Distributed
+    await run('UPDATE ticket_stock SET status = "Distributed" WHERE id = ?', [stock_id]);
+
+    // Get details from the new stock to update the distribution record
+    const newStock = await get('SELECT start_number, end_number FROM ticket_stock WHERE id = ?', [stock_id]);
+
+    await run('UPDATE ticket_distributions SET staff_id = ?, ride_id = ?, stock_id = ?, distributed_start_number = ?, distributed_end_number = ? WHERE id = ? AND status = \'Distributed\'', [staff_id, ride_id, stock_id, newStock.start_number, newStock.end_number, distributionId]);
+    await run('COMMIT');
     req.session.flash = { type: 'success', message: 'Distribution updated successfully.' };
   } catch (err) {
+    await run('ROLLBACK');
     console.error('Error updating distribution:', err);
     req.session.flash = { type: 'danger', message: 'Failed to update distribution.' };
   }
@@ -363,19 +490,117 @@ router.post('/distribute/delete/:id', isAdmin, async (req, res) => {
   res.redirect('/ticketing/distribute');
 });
 
+// GET /ticketing/distribute/bulk - Show form for bulk distribution
+router.get('/distribute/bulk', isAdmin, (req, res) => {
+  res.render('ticketingDistributeBulk', { title: 'Bulk Distribute Tickets' });
+});
+
+// POST /ticketing/distribute/bulk - Process bulk distribution CSV
+router.post('/distribute/bulk', isAdmin, upload.single('distributeFile'), async (req, res) => {
+  if (!req.file) {
+    req.session.flash = { type: 'danger', message: 'No file was uploaded.' };
+    return res.redirect('/ticketing/distribute/bulk');
+  }
+
+  const filePath = req.file.path;
+  const fileContent = fs.readFileSync(filePath, 'utf8');
+  const rows = fileContent.split('\n').filter(row => row.trim() !== '');
+  const activeSessionId = res.locals.activeSession.id;
+
+  try {
+    await run('BEGIN TRANSACTION');
+
+    for (const [index, row] of rows.entries()) {
+      const [distribution_date, staff_name, ride_name, stock_start_number] = row.split(',').map(field => field.trim());
+
+      if (!distribution_date || !staff_name || !ride_name || !stock_start_number) {
+        throw new Error(`Row ${index + 1}: Incomplete data. All four fields are required.`);
+      }
+
+      const staff = await get('SELECT id FROM booking_staff WHERE name = ?', [staff_name]);
+      if (!staff) throw new Error(`Row ${index + 1}: Staff member "${staff_name}" not found.`);
+
+      const ride = await get('SELECT id, rate FROM rides WHERE name = ?', [ride_name]);
+      if (!ride) throw new Error(`Row ${index + 1}: Ride "${ride_name}" not found.`);
+
+      const stock = await get('SELECT id, start_number, end_number FROM ticket_stock WHERE start_number = ? AND status = "Available" AND rate = ? AND event_session_id = ?', [stock_start_number, ride.rate, activeSessionId]);
+      if (!stock) throw new Error(`Row ${index + 1}: Available stock bundle starting with "${stock_start_number}" for rate ${ride.rate} not found.`);
+
+      const sql = 'INSERT INTO ticket_distributions (distribution_date, staff_id, ride_id, stock_id, distributed_start_number, distributed_end_number, event_session_id) VALUES (?, ?, ?, ?, ?, ?, ?)';
+      await run(sql, [distribution_date, staff.id, ride.id, stock.id, stock.start_number, stock.end_number, activeSessionId]);
+      await run("UPDATE ticket_stock SET status = 'Distributed' WHERE id = ?", [stock.id]);
+    }
+
+    await run('COMMIT');
+    req.session.flash = { type: 'success', message: `Successfully distributed ${rows.length} ticket bundles.` };
+    res.redirect('/ticketing/distribute');
+  } catch (err) {
+    await run('ROLLBACK');
+    console.error('Error during bulk ticket distribution:', err);
+    req.session.flash = { type: 'danger', message: `Import failed: ${err.message}` };
+    res.redirect('/ticketing/distribute/bulk');
+  } finally {
+    // Clean up the uploaded file
+    fs.unlinkSync(filePath);
+  }
+});
+
 // GET /ticketing/settle - Show unsettled distributions
 router.get('/settle', isAdmin, async (req, res) => {
   try {
     const activeSessionId = res.locals.activeSession.id;
-    const distributions = await all(`
+    const { q } = req.query;
+
+    let unsettledSql = `
       SELECT td.*, s.name as staff_name, r.name as ride_name, r.rate
       FROM ticket_distributions td
       JOIN booking_staff s ON td.staff_id = s.id
       JOIN rides r ON td.ride_id = r.id
-      WHERE td.status = 'Distributed' AND td.event_session_id = ?
-      ORDER BY td.distribution_date, s.name
+    `;
+    const unsettledParams = [activeSessionId];
+    const unsettledWhere = ["td.status = 'Distributed'", "td.event_session_id = ?"];
+    if (q) {
+      unsettledWhere.push('(s.name LIKE ? OR r.name LIKE ?)');
+      unsettledParams.push(`%${q}%`, `%${q}%`);
+    }
+    unsettledSql += ` WHERE ${unsettledWhere.join(' AND ')} ORDER BY td.distribution_date, s.name`;
+    const unsettled = await all(unsettledSql, unsettledParams);
+
+    let settledSql = `
+      SELECT td.*, s.name as staff_name, r.name as ride_name, u.username as settled_by
+      FROM ticket_distributions td
+      JOIN booking_staff s ON td.staff_id = s.id
+      JOIN rides r ON td.ride_id = r.id
+      LEFT JOIN users u ON td.settled_by_user_id = u.id
+    `;
+    const settledParams = [activeSessionId];
+    const settledWhere = ["td.status = 'Settled'", "td.event_session_id = ?"];
+    if (q) {
+      settledWhere.push('(s.name LIKE ? OR r.name LIKE ?)');
+      settledParams.push(`%${q}%`, `%${q}%`);
+    }
+    settledSql += ` WHERE ${settledWhere.join(' AND ')} ORDER BY td.settlement_date DESC, td.id DESC LIMIT 10`;
+    const settled = await all(settledSql, settledParams);
+
+    // --- Data for Cash Settlement ---
+    const staffList = await all('SELECT id, name FROM booking_staff ORDER BY name');
+    const unsettledTotals = await all(`
+      SELECT s.name, SUM(ss.difference) as total_unsettled
+      FROM staff_settlements ss
+      JOIN booking_staff s ON ss.staff_id = s.id
+      WHERE ss.event_session_id = ? AND ss.status = 'unsettled'
+      GROUP BY ss.staff_id
+      HAVING total_unsettled != 0
     `, [activeSessionId]);
-    res.render('ticketingSettle', { title: 'Settle Ticket Sales', distributions });
+
+    res.render('ticketingSettle', {
+      title: 'Settle Ticket Sales',
+      distributions: unsettled,
+      settledDistributions: settled,
+      filters: { q: q || '' },
+      staffList,
+      unsettledTotals
+    });
   } catch (err) {
     console.error('Error loading settlement page:', err);
     res.status(500).send('Error loading page.');
@@ -421,14 +646,27 @@ router.get('/settle/confirm/:id', isAdmin, async (req, res) => {
 router.post('/settle/:id', isAdmin, async (req, res) => {
   const distributionId = req.params.id;
   const { returned_start_number, upi_amount } = req.body;
-  const settlement_date = new Date().toISOString().split('T')[0];
 
   try {
-    const dist = await get('SELECT * FROM ticket_distributions WHERE id = ?', [distributionId]);
-    const ride = await get('SELECT rate FROM rides WHERE id = ?', [dist.ride_id]);
+    const dist = await get('SELECT * FROM ticket_distributions WHERE id = ? AND status = "Distributed"', [distributionId]);
+    if (!dist) {
+      req.session.flash = { type: 'danger', message: 'Distribution not found or already settled.' };
+      return res.redirect('/ticketing/settle');
+    }
+    // Use the original distribution date as the settlement date
+    const settlement_date = dist.distribution_date;
 
-    const tickets_sold = parseInt(returned_start_number) - dist.distributed_start_number;
+    const ride = await get('SELECT rate FROM rides WHERE id = ?', [dist.ride_id]);
+    const originalStock = await get('SELECT * FROM ticket_stock WHERE id = ?', [dist.stock_id]);
+
+    const returnedStart = parseInt(returned_start_number);
+    if (returnedStart < dist.distributed_start_number || returnedStart > originalStock.end_number + 1) {
+      req.session.flash = { type: 'danger', message: 'Invalid returned start number. It is outside the bundle range.' };
+      return res.redirect('/ticketing/settle');
+    }
+    const tickets_sold = returnedStart - dist.distributed_start_number;
     const calculated_revenue = tickets_sold * ride.rate;
+
     const upiAmount = parseFloat(upi_amount) || 0;
     const cashAmount = calculated_revenue - upiAmount;
 
@@ -436,10 +674,19 @@ router.post('/settle/:id', isAdmin, async (req, res) => {
 
     // 1. Update distribution record
     const updateSql = `UPDATE ticket_distributions SET returned_start_number = ?, settlement_date = ?, tickets_sold = ?, calculated_revenue = ?, upi_amount = ?, cash_amount = ?, status = 'Settled', settled_by_user_id = ? WHERE id = ?`;
-    await run(updateSql, [parseInt(returned_start_number), settlement_date, tickets_sold, calculated_revenue, upiAmount, cashAmount, req.session.user.id, distributionId]);
+    await run(updateSql, [returnedStart, settlement_date, tickets_sold, calculated_revenue, upiAmount, cashAmount, req.session.user.id, distributionId]);
 
     // 2. Update stock status to Settled
     await run("UPDATE ticket_stock SET status = 'Settled' WHERE id = ?", [dist.stock_id]);
+
+    // 3. If there are unsold tickets, create a new 'Available' stock bundle with the remainder
+    if (returnedStart <= originalStock.end_number) {
+      const newStockSql = `
+        INSERT INTO ticket_stock (rate, color, start_number, end_number, status, event_session_id) 
+        VALUES (?, ?, ?, ?, 'Available', ?)
+      `;
+      await run(newStockSql, [originalStock.rate, originalStock.color, returnedStart, originalStock.end_number, originalStock.event_session_id]);
+    }
 
     // 3. Add to accounting
     const accountingSql = `INSERT INTO accounting_transactions (transaction_type, category, description, amount, transaction_date, user_id) VALUES (?, ?, ?, ?, ?, ?)`;
@@ -598,91 +845,86 @@ router.get('/report/daily', isAdmin, async (req, res) => {
 router.get('/report/stock', isAdmin, async (req, res) => {
   try {
     const activeSessionId = res.locals.activeSession.id;
-    const { status, rate, page } = req.query;
-    const currentPage = parseInt(page) || 1;
-    const limit = 50; // Items per page
-    const offset = (currentPage - 1) * limit;
+    const { rate: rateFilter } = req.query;
 
     // Base query
     let sql = `
+      WITH StockTotals AS (
+        SELECT
+          color,
+          rate,
+          SUM(end_number - start_number + 1) as initial_stock
+        FROM ticket_stock
+        WHERE event_session_id = ?
+        GROUP BY color, rate
+      ),
+      AggregatedSales AS (
+        SELECT
+          ts.color,
+          ts.rate,
+          SUM(CASE WHEN td.status = 'Settled' THEN td.tickets_sold ELSE 0 END) as sold_stock,
+          SUM(CASE WHEN td.status = 'Distributed' THEN (ts.end_number - ts.start_number + 1) ELSE 0 END) as distributed_stock
+        FROM ticket_distributions td
+        JOIN ticket_stock ts ON td.stock_id = ts.id
+        WHERE td.event_session_id = ?
+        GROUP BY ts.color, ts.rate
+      )
       SELECT
-        ts.start_number,
-        ts.end_number,
-        ts.color,
-        ts.status,
-        ts.created_at,
-        ts.rate,
-        s.name as staff_name
-      FROM ticket_stock ts
-      LEFT JOIN ticket_distributions td ON ts.id = td.stock_id AND td.status = 'Distributed'
-      LEFT JOIN booking_staff s ON td.staff_id = s.id
+        st.color,
+        st.rate,
+        st.initial_stock,
+        COALESCE(ags.sold_stock, 0) as sold_stock,
+        COALESCE(ags.distributed_stock, 0) as distributed_stock,
+        (st.initial_stock - COALESCE(ags.sold_stock, 0) - COALESCE(ags.distributed_stock, 0)) as available_stock
+      FROM StockTotals st
+      LEFT JOIN AggregatedSales ags ON st.color = ags.color AND st.rate = ags.rate
     `;
-    // Filtering
+    const params = [activeSessionId, activeSessionId];
     const whereClauses = [];
-    const params = [activeSessionId];
-    whereClauses.push('ts.event_session_id = ?');
 
-    if (status && status !== 'all') {
-      whereClauses.push('ts.status = ?');
-      params.push(status);
-    }
-    if (rate && rate !== 'all') {
+    if (rateFilter && rateFilter !== 'all') {
       whereClauses.push('ts.rate = ?');
-      params.push(parseFloat(rate));
+      params.push(parseFloat(rateFilter));
     }
 
     if (whereClauses.length > 0) {
-      sql += ' WHERE ' + whereClauses.join(' AND ');
+      sql += ` WHERE ${whereClauses.join(' AND ')}`;
     }
+    sql += ` ORDER BY st.rate, st.color`;
 
-    // Query for total count for pagination
-    const countSql = `SELECT COUNT(ts.id) as count FROM ticket_stock ts ${whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : ''}`;
-    const totalResult = await get(countSql, params);
-    const totalItems = totalResult.count;
-    const totalPages = Math.ceil(totalItems / limit);
-
-    // Add ordering and pagination to main query
-    sql += ' ORDER BY ts.status, ts.rate, ts.start_number LIMIT ? OFFSET ?';
-    params.push(limit, offset);
-
-    // Query for summary counts
-    let summarySql = `SELECT ts.status, COUNT(*) as count FROM ticket_stock ts`;
-    const summaryParams = [activeSessionId];
-    let summaryWhere = ['ts.event_session_id = ?'];
-    if (rate && rate !== 'all') {
-      summaryWhere.push('br.rate = ?');
-      summaryParams.push(parseFloat(rate));
-    }
-    summarySql += ' WHERE ' + summaryWhere.join(' AND ');
-    summarySql += ` GROUP BY ts.status`;
-
-    const summaryCountsRaw = await all(summarySql, summaryParams);
-    const summaryCounts = { Available: 0, Distributed: 0, Settled: 0, Cancelled: 0 };
-    summaryCountsRaw.forEach(row => {
-      if (summaryCounts.hasOwnProperty(row.status)) {
-        summaryCounts[row.status] = row.count;
-      }
-    });
-    
-    // Run all queries
-    const [stock, allRates] = await Promise.all([
+    const [stockSummary, allRates] = await Promise.all([
       all(sql, params),
       all('SELECT DISTINCT rate FROM ticket_stock WHERE event_session_id = ? AND rate IS NOT NULL ORDER BY rate DESC', [activeSessionId])
     ]);
 
-    const pagination = {
-      currentPage,
-      totalPages,
-      totalItems,
+    // --- Prepare data for the chart ---
+    const rates = [...new Set(stockSummary.map(item => `₹${item.rate.toFixed(2)}`))].sort((a, b) => parseFloat(a.slice(1)) - parseFloat(b.slice(1)));
+    const colors = [...new Set(stockSummary.map(item => item.color))];
+
+    const datasets = colors.map(color => {
+      const data = rates.map(rateString => {
+        const rateValue = parseFloat(rateString.slice(1));
+        const item = stockSummary.find(s => s.color === color && s.rate === rateValue);
+        return item ? item.available_stock : 0;
+      });
+      return {
+        label: color,
+        data: data,
+        backgroundColor: color.toLowerCase(),
+      };
+    });
+
+    const chartData = {
+      labels: rates,
+      datasets: datasets
     };
 
     res.render('ticketingStockReport', {
       title: 'Ticket Stock Status Report',
-      stock,
-      summaryCounts,
+      stockSummary,
+      chartData,
       allRates,
-      pagination,
-      filters: { status: status || 'all', rate: rate || 'all' }
+      filters: { rate: rateFilter || 'all' }
     });
   } catch (err) {
     console.error('Error loading stock status report:', err);
@@ -823,31 +1065,73 @@ router.post('/import/delete/:id', isAdmin, async (req, res) => {
   res.redirect('/ticketing');
 });
 
+// GET /ticketing/import/bulk - Show form for bulk import of past sales
+router.get('/import/bulk', isAdmin, (req, res) => {
+  res.render('ticketingImportBulk', { title: 'Bulk Import Past Sales' });
+});
+
+// POST /ticketing/import/bulk - Process bulk import CSV
+router.post('/import/bulk', isAdmin, upload.single('importFile'), async (req, res) => {
+  if (!req.file) {
+    req.session.flash = { type: 'danger', message: 'No file was uploaded.' };
+    return res.redirect('/ticketing/import/bulk');
+  }
+
+  const filePath = req.file.path;
+  const fileContent = fs.readFileSync(filePath, 'utf8');
+  const rows = fileContent.split('\n').filter(row => row.trim() !== '');
+  const activeSessionId = res.locals.activeSession.id;
+  const adminUserId = req.session.user.id;
+
+  try {
+    await run('BEGIN TRANSACTION');
+
+    for (const [index, row] of rows.entries()) {
+      const [settlement_date, ride_name, rate, tickets_sold, upi_amount] = row.split(',').map(field => field.trim());
+
+      if (!settlement_date || !ride_name || !rate || !tickets_sold) {
+        throw new Error(`Row ${index + 1} is incomplete. Date, Ride Name, Rate, and Tickets Sold are required.`);
+      }
+
+      // Find or create the ride
+      let rideRecord = await get('SELECT id FROM rides WHERE name = ?', [ride_name]);
+      if (!rideRecord) {
+        const result = await run('INSERT INTO rides (name, rate) VALUES (?, ?)', [ride_name, parseFloat(rate)]);
+        rideRecord = { id: result.lastID };
+      }
+
+      const ticketsSoldNum = parseInt(tickets_sold);
+      const calculatedRevenue = ticketsSoldNum * parseFloat(rate);
+      const upiAmountNum = parseFloat(upi_amount) || 0;
+      const cashAmount = calculatedRevenue - upiAmountNum;
+
+      const distSql = `INSERT INTO ticket_distributions (distribution_date, settlement_date, staff_id, ride_id, tickets_sold, calculated_revenue, upi_amount, cash_amount, status, settled_by_user_id, event_session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Settled', ?, ?)`;
+      const { lastID: distributionId } = await run(distSql, [settlement_date, settlement_date, 1, rideRecord.id, ticketsSoldNum, calculatedRevenue, upiAmountNum, cashAmount, adminUserId, activeSessionId]);
+
+      const accountingSql = `INSERT INTO accounting_transactions (transaction_type, category, description, amount, transaction_date, user_id, event_session_id) VALUES (?, ?, ?, ?, ?, ?, ?)`;
+      await run(accountingSql, ['income', 'Ticket Sales', `Imported sale for distribution #${distributionId}`, calculatedRevenue, settlement_date, adminUserId, activeSessionId]);
+    }
+
+    await run('COMMIT');
+    req.session.flash = { type: 'success', message: `Successfully imported ${rows.length} past sales records.` };
+    res.redirect('/ticketing');
+  } catch (err) {
+    await run('ROLLBACK');
+    console.error('Error during bulk sales import:', err);
+    req.session.flash = { type: 'danger', message: `Import failed: ${err.message}` };
+    res.redirect('/ticketing/import/bulk');
+  } finally {
+    // Clean up the uploaded file
+    fs.unlinkSync(filePath);
+  }
+});
+
 // --- Staff Cash Settlement (Short/Excess) Routes ---
 
 // GET: Show the staff cash settlement page
 router.get('/cash-settle', isAdmin, async (req, res) => {
-  try {
-    const viewingSessionId = res.locals.viewingSession.id;
-    const staffList = await all('SELECT id, name FROM booking_staff ORDER BY name');
-    const unsettledTotals = await all(`
-      SELECT s.name, SUM(ss.difference) as total_unsettled
-      FROM staff_settlements ss
-      JOIN booking_staff s ON ss.staff_id = s.id
-      WHERE ss.event_session_id = ? AND ss.status = 'unsettled'
-      GROUP BY ss.staff_id
-      HAVING total_unsettled != 0
-    `, [viewingSessionId]);
-
-    res.render('ticketSettle', {
-      title: 'Settle Staff Cash',
-      staffList,
-      unsettledTotals
-    });
-  } catch (err) {
-    console.error('Error loading cash settlement page:', err.message);
-    res.status(500).send('Error loading page.');
-  }
+  // This route is now combined into GET /ticketing/settle
+  res.redirect('/ticketing/settle');
 });
 
 // API GET: Calculate expected amount for a staff member (placeholder logic)

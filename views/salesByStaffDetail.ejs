@@ -1,0 +1,118 @@
+<%- include('partials/header') %>
+
+<style>
+  @media print {
+    @page {
+      size: A4 portrait;
+      margin: 1.5cm;
+    }
+    .no-print {
+      display: none;
+    }
+    .card {
+      border: none;
+      box-shadow: none;
+    }
+  }
+</style>
+
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+    <div>
+      <h1 class="h3 mb-1 text-gray-800"><%= title %></h1>
+      <a href="/report/sales-by-staff" class="btn btn-sm btn-outline-secondary">« Back to Summary</a>
+    </div>
+    <button class="btn btn-sm btn-outline-secondary" onclick="window.print()">
+      <i class="bi bi-printer me-1"></i> Print Report
+    </button>
+  </div>
+
+  <!-- Filter Form -->
+  <div class="card shadow-sm mb-4 no-print">
+    <div class="card-body">
+      <form method="GET" class="row g-3 align-items-end">
+        <div class="col-md-4">
+          <label for="start_date" class="form-label">Start Date</label>
+          <input type="date" class="form-control" id="start_date" name="start_date" value="<%= filters.start_date %>">
+        </div>
+        <div class="col-md-4">
+          <label for="end_date" class="form-label">End Date</label>
+          <input type="date" class="form-control" id="end_date" name="end_date" value="<%= filters.end_date %>">
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-primary w-100">Filter</button>
+        </div>
+        <div class="col-md-2">
+          <a href="?" class="btn btn-outline-secondary w-100">Clear</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Report Table -->
+  <div class="row">
+    <div class="col-lg-8">
+      <div class="card shadow-sm">
+        <div class="card-header py-3">
+          <h6 class="m-0 fw-bold text-primary">Sales Breakdown by Ride</h6>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-bordered table-striped" width="100%" cellspacing="0">
+              <thead class="table-light">
+                <tr>
+                  <th>Ride Name</th>
+                  <th class="text-end">Ticket Rate (₹)</th>
+                  <th class="text-end">Tickets Sold</th>
+                  <th class="text-end">Total Revenue (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% details.forEach(item => { %>
+                  <tr>
+                    <td><%= item.ride_name %></td>
+                    <td class="text-end"><%= item.rate.toFixed(2) %></td>
+                    <td class="text-end"><%= item.total_tickets_sold.toLocaleString('en-IN') %></td>
+                    <td class="text-end fw-bold"><%= item.total_revenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card shadow-sm no-print">
+        <div class="card-header py-3">
+          <h6 class="m-0 fw-bold text-primary">Revenue by Ride</h6>
+        </div>
+		<div class="card-body" style="position: relative; height: 250px;">
+		  <!-- Adjust height as needed -->
+
+          <canvas id="rideSalesPieChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const pieCtx = document.getElementById('rideSalesPieChart').getContext('2d');
+    new Chart(pieCtx, {
+      type: 'pie',
+      data: {
+        labels: <%- JSON.stringify(pieChartData.labels) %>,
+        datasets: [{
+          data: <%- JSON.stringify(pieChartData.data) %>,
+          backgroundColor: ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796', '#5a5c69'],
+        }]
+      },
+      options: { responsive: true, plugins: { legend: { position: 'top' } } }
+	  
+    });
+  });
+</script>
+
+<%- include('partials/footer') %>

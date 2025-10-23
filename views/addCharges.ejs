@@ -21,7 +21,7 @@
         <div class="row g-3">
           <div class="col-md-6">
             <label for="booking_id" class="form-label">Exhibitor <span class="text-danger">*</span></label>
-            <select id="booking_id" name="booking_id" class="form-select" required>
+            <select id="booking_id" name="booking_id" class="form-select" required autofocus>
               <option value="">-- Select Exhibitor --</option>
               <% bookings.forEach(b => { %>
                 <option value="<%= b.id %>" data-facia-name="<%= b.facia_name || '' %>"><%= b.exhibitor_name %> (<%= b.space_name %>)</option>

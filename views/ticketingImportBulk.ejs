@@ -3,22 +3,23 @@
 <div class="container-fluid">
   <%- include('partials/ticketingNav') %>
 
-   <div class="row">
+
+  <div class="row">
     <div class="col-lg-8">
       <div class="card shadow-sm mb-4">
         <div class="card-header py-3">
           <h6 class="m-0 fw-bold text-primary">Upload CSV File</h6>
         </div>
         <div class="card-body">
-          <form action="/ticketing/stock/bulk-upload" method="POST" enctype="multipart/form-data">
+          <form action="/ticketing/import/bulk" method="POST" enctype="multipart/form-data">
             <div class="mb-3">
-              <label for="stockFile" class="form-label">Select CSV file to upload</label>
-              <input class="form-control" type="file" id="stockFile" name="stockFile" accept=".csv" required>
+              <label for="importFile" class="form-label">Select CSV file to upload</label>
+              <input class="form-control" type="file" id="importFile" name="importFile" accept=".csv" required>
             </div>
             <button type="submit" class="btn btn-primary">
-              <i class="bi bi-upload me-1"></i> Upload and Process
+              <i class="bi bi-upload me-1"></i> Upload and Import Sales
             </button>
-            <a href="/ticketing/stock" class="btn btn-secondary">Cancel</a>
+            <a href="/ticketing/import" class="btn btn-secondary">Cancel</a>
           </form>
         </div>
       </div>
@@ -29,20 +30,21 @@
           <h6 class="m-0 fw-bold text-primary">CSV Format Instructions</h6>
         </div>
         <div class="card-body">
-          <p>Your CSV file should contain four columns in the following order:</p>
+          <p>Your CSV file should contain five columns in the following order:</p>
           <ol>
+            <li><strong>Date:</strong> The date of the sale (e.g., <code>YYYY-MM-DD</code>).</li>
+            <li><strong>Ride Name:</strong> The name of the ride (e.g., <code>Ferris Wheel</code>).</li>
             <li><strong>Rate:</strong> The price of a single ticket (e.g., <code>50.00</code>).</li>
-            <li><strong>Color:</strong> The color of the ticket bundle (e.g., <code>Red</code>).</li>
-            <li><strong>Start Number:</strong> The first serial number in the bundle.</li>
-            <li><strong>End Number:</strong> The last serial number in the bundle.</li>
+            <li><strong>Tickets Sold:</strong> The total number of tickets sold.</li>
+            <li><strong>UPI Amount:</strong> The portion of revenue collected via UPI (can be <code>0</code>).</li>
           </ol>
           <p class="mb-0"><strong>Important:</strong> Do not include a header row in your file.</p>
         </div>
         <div class="card-footer">
           <h6 class="fw-bold">Example:</h6>
-<pre><code>50.00,Red,1001,2000
-100.00,Blue,5001,6000
-20.00,Green,1,500
+<pre><code>2023-12-25,Ferris Wheel,50.00,120,2500
+2023-12-25,Carousel,30.00,85,0
+2023-12-26,Ferris Wheel,50.00,150,4000
 </code></pre>
         </div>
       </div>

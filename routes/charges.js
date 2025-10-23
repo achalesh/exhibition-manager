@@ -168,8 +168,10 @@ router.get('/edit/:id', async (req, res) => {
 // POST: Update a payment
 router.post('/edit/:id', async (req, res) => {
   const paymentId = req.params.id;
-  const { receipt_number, payment_date, amount_paid } = req.body;
-  const newAmount = parseFloat(amount_paid) || 0;
+  const { receipt_number, payment_date, cash_paid, upi_paid } = req.body;
+  const newCashAmount = parseFloat(cash_paid) || 0;
+  const newUpiAmount = parseFloat(upi_paid) || 0;
+  const newTotalAmount = newCashAmount + newUpiAmount;
 
   if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
     const payment = await get('SELECT booking_id FROM payments WHERE id = ?', [paymentId]);
@@ -177,35 +179,32 @@ router.post('/edit/:id', async (req, res) => {
     return res.redirect(`/booking/details-full/${payment.booking_id}`);
   }
 
-  if (newAmount <= 0) {
+  if (newTotalAmount <= 0) {
     return res.status(400).send('Payment amount must be greater than zero.');
   }
 
   if (req.session.user && req.session.user.role === 'admin') {
-    db.serialize(async () => {
-      try {
-        db.run('BEGIN TRANSACTION');
-        const oldPayment = await get('SELECT * FROM payments WHERE id = ?', [paymentId]);
-        if (!oldPayment) throw new Error('Original payment not found.');
-        const oldAmount = oldPayment.rent_paid + oldPayment.electric_paid + oldPayment.material_paid + oldPayment.shed_paid;
-        const amountDifference = oldAmount - newAmount;
-        let targetCol = '';
-        if (oldPayment.rent_paid > 0) targetCol = 'rent_paid'; else if (oldPayment.electric_paid > 0) targetCol = 'electric_paid'; else if (oldPayment.material_paid > 0) targetCol = 'material_paid'; else if (oldPayment.shed_paid > 0) targetCol = 'shed_paid';
-        if (!targetCol) throw new Error('Could not determine payment type for old payment.');
-        await run(`UPDATE payments SET receipt_number = ?, payment_date = ?, ${targetCol} = ? WHERE id = ?`, [receipt_number, payment_date, newAmount, paymentId]);
-        await run('UPDATE bookings SET due_amount = due_amount + ? WHERE id = ?', [amountDifference, oldPayment.booking_id]);
-
-        // Update the corresponding accounting transaction
-        await run('UPDATE accounting_transactions SET amount = ?, transaction_date = ? WHERE payment_id = ?', [newAmount, payment_date, paymentId]);
-
-        db.run('COMMIT');
-        res.redirect(`/booking/details-full/${oldPayment.booking_id}?message=Payment updated successfully.`);
-      } catch (err) {
-        db.run('ROLLBACK');
-        console.error(`Error updating payment #${paymentId}:`, err.message);
-        res.status(500).send('Failed to update payment.');
-      }
-    });
+    try {
+      let bookingIdToRedirect;
+      await transaction(async (db) => {
+          const oldPayment = await db.get('SELECT * FROM payments WHERE id = ?', [paymentId]);
+          if (!oldPayment) throw new Error('Original payment not found.');
+          bookingIdToRedirect = oldPayment.booking_id;
+          const oldTotalAmount = oldPayment.rent_paid + oldPayment.electric_paid + oldPayment.material_paid + oldPayment.shed_paid;
+          const amountDifference = oldTotalAmount - newTotalAmount;
+          const newPaymentMode = newCashAmount > 0 && newUpiAmount > 0 ? 'Cash & UPI' : (newCashAmount > 0 ? 'Cash' : 'UPI');
+          let targetCol = '';
+          if (oldPayment.rent_paid > 0) targetCol = 'rent_paid'; else if (oldPayment.electric_paid > 0) targetCol = 'electric_paid'; else if (oldPayment.material_paid > 0) targetCol = 'material_paid'; else if (oldPayment.shed_paid > 0) targetCol = 'shed_paid';
+          if (!targetCol) throw new Error('Could not determine payment type for old payment.');
+          await db.run(`UPDATE payments SET receipt_number = ?, payment_date = ?, payment_mode = ?, cash_paid = ?, upi_paid = ?, ${targetCol} = ? WHERE id = ?`, [receipt_number, payment_date, newPaymentMode, newCashAmount, newUpiAmount, newTotalAmount, paymentId]);
+          await db.run('UPDATE bookings SET due_amount = due_amount + ? WHERE id = ?', [amountDifference, oldPayment.booking_id]);
+          await db.run('UPDATE accounting_transactions SET amount = ?, transaction_date = ? WHERE payment_id = ?', [newTotalAmount, payment_date, paymentId]);
+      });
+      res.redirect(`/booking/details-full/${bookingIdToRedirect}?message=Payment updated successfully.`);
+    } catch (err) {
+      console.error(`Error updating payment #${paymentId}:`, err.message);
+      res.status(500).send('Failed to update payment.');
+    }
   } else {
     // Non-admin: Submit for approval
     try {
@@ -344,7 +343,11 @@ router.get('/receipt/:id', async (req, res) => {
       return res.status(404).send('Payment receipt not found.');
     }
 
-    res.render('paymentReceipt', { title: `Receipt #${payment.receipt_number || payment.id}`, payment });
+    res.render('paymentReceipt', {
+      title: `Receipt #${payment.receipt_number || payment.id}`,
+      payment,
+      viewingSession: res.locals.viewingSession // Pass session data to the view
+    });
   } catch (err) {
     console.error('Error generating payment receipt:', err);
     res.status(500).send('Error generating receipt.');

@@ -493,31 +493,69 @@ async function setupDatabase() {
       console.log('Ticketing tables created.');
 
       // Table for detailed ticket distribution and settlement
-      await run(`CREATE TABLE IF NOT EXISTS ticket_distributions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        distribution_date DATE NOT NULL,
-        staff_id INTEGER NOT NULL,
-        ride_id INTEGER NOT NULL,
-        stock_id INTEGER, 
-        distributed_start_number INTEGER NOT NULL,
-        distributed_end_number INTEGER NOT NULL,
-        returned_start_number INTEGER,
-        returned_end_number INTEGER,
-        settlement_date DATE,
-        tickets_sold INTEGER,
-        calculated_revenue REAL,
-        upi_amount REAL,
-        cash_amount REAL,
-        status TEXT DEFAULT 'Distributed',
-        settled_by_user_id INTEGER,
-        FOREIGN KEY (staff_id) REFERENCES booking_staff(id),
-        FOREIGN KEY (ride_id) REFERENCES rides(id),
-        FOREIGN KEY (stock_id) REFERENCES ticket_stock(id)
-      )`);
-      await run(`ALTER TABLE ticket_distributions ADD COLUMN ride_id INTEGER`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
-      await run(`ALTER TABLE ticket_distributions ADD COLUMN stock_id INTEGER`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
-      await run(`ALTER TABLE ticket_distributions ADD COLUMN upi_amount REAL`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
-      await run(`ALTER TABLE ticket_distributions ADD COLUMN cash_amount REAL`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
+      try {
+        // Rebuild the table to safely remove the old 'rate_id' column and its constraints
+        await run('ALTER TABLE ticket_distributions RENAME TO ticket_distributions_old');
+        await run(`
+          CREATE TABLE ticket_distributions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            distribution_date DATE NOT NULL,
+            staff_id INTEGER NOT NULL,
+            ride_id INTEGER,
+            stock_id INTEGER,
+            distributed_start_number INTEGER,
+            distributed_end_number INTEGER,
+            returned_start_number INTEGER,
+            settlement_date DATE,
+            tickets_sold INTEGER,
+            calculated_revenue REAL,
+            upi_amount REAL,
+            cash_amount REAL,
+            status TEXT DEFAULT 'Distributed',
+            settled_by_user_id INTEGER,
+            event_session_id INTEGER,
+            FOREIGN KEY (staff_id) REFERENCES booking_staff(id),
+            FOREIGN KEY (ride_id) REFERENCES rides(id),
+            FOREIGN KEY (stock_id) REFERENCES ticket_stock(id),
+            FOREIGN KEY (event_session_id) REFERENCES event_sessions(id)
+          )
+        `);
+        await run(`INSERT INTO ticket_distributions (id, distribution_date, staff_id, ride_id, stock_id, distributed_start_number, distributed_end_number, returned_start_number, settlement_date, tickets_sold, calculated_revenue, upi_amount, cash_amount, status, settled_by_user_id, event_session_id) SELECT id, distribution_date, staff_id, ride_id, stock_id, distributed_start_number, distributed_end_number, returned_start_number, settlement_date, tickets_sold, calculated_revenue, upi_amount, cash_amount, status, settled_by_user_id, event_session_id FROM ticket_distributions_old`);
+        await run('DROP TABLE ticket_distributions_old');
+        console.log('ticket_distributions table migrated successfully.');
+      } catch (e) {
+        if (e.message.includes('no such table: ticket_distributions_old')) {
+          // This means the migration has likely run before, or it's a fresh setup.
+          // We can proceed to ensure the table exists with the correct schema.
+          await run(`
+            CREATE TABLE IF NOT EXISTS ticket_distributions (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              distribution_date DATE NOT NULL,
+              staff_id INTEGER NOT NULL,
+              ride_id INTEGER,
+              stock_id INTEGER,
+              distributed_start_number INTEGER,
+              distributed_end_number INTEGER,
+              returned_start_number INTEGER,
+              settlement_date DATE,
+              tickets_sold INTEGER,
+              calculated_revenue REAL,
+              upi_amount REAL,
+              cash_amount REAL,
+              status TEXT DEFAULT 'Distributed',
+              settled_by_user_id INTEGER,
+              event_session_id INTEGER,
+              FOREIGN KEY (staff_id) REFERENCES booking_staff(id),
+              FOREIGN KEY (ride_id) REFERENCES rides(id),
+              FOREIGN KEY (stock_id) REFERENCES ticket_stock(id),
+              FOREIGN KEY (event_session_id) REFERENCES event_sessions(id)
+            )
+          `);
+        } else if (!e.message.includes('no such table: ticket_distributions')) {
+          // If the error is not about the old table not existing, re-throw it.
+          throw e;
+        }
+      }
 
       // Table for staff cash settlements (short/excess)
       await run(`CREATE TABLE IF NOT EXISTS staff_settlements (
