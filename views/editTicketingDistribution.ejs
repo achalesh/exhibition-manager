@@ -1,38 +1,76 @@
 <%- include('partials/header') %>
 
 <div class="container-fluid">
-  <h1 class="h3 mb-4"><%= title %></h1>
+  <h1 class="h3 mb-4 text-gray-800"><%= title %></h1>
 
-  <div class="card shadow-sm mb-4">
+  <div class="card shadow-sm">
     <div class="card-header py-3">
-      <h6 class="m-0 fw-bold text-primary">Edit Distribution #<%= distribution.id %></h6>
+      <h6 class="m-0 fw-bold text-primary">Editing Distribution #<%= distribution.id %></h6>
     </div>
     <div class="card-body">
-      <form action="/ticketing/distribute/edit/<%= distribution.id %>" method="POST" class="row g-3 align-items-end">
-        <div class="col-md-5">
-          <label for="staff_id" class="form-label">Staff Member</label>
-          <select id="staff_id" name="staff_id" class="form-select" required>
-            <% staff.forEach(s => { %>
-              <option value="<%= s.id %>" <%= distribution.staff_id == s.id ? 'selected' : '' %>><%= s.name %></option>
-            <% }) %>
-          </select>
+      <form action="/ticketing/distribute/edit/<%= distribution.id %>" method="POST">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label for="staff_id" class="form-label">Staff Member</label>
+            <select id="staff_id" name="staff_id" class="form-select" required>
+              <% staff.forEach(s => { %>
+                <option value="<%= s.id %>" <%= distribution.staff_id === s.id ? 'selected' : '' %>><%= s.name %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label for="ride_id" class="form-label">Ride</label>
+            <select id="ride_id" name="ride_id" class="form-select" required>
+              <% rides.forEach(ride => { %>
+                <option value="<%= ride.id %>" data-rate="<%= ride.rate %>" <%= distribution.ride_id === ride.id ? 'selected' : '' %>>
+                  <%= ride.name %> (₹<%= ride.rate %>)
+                </option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label for="stock_id" class="form-label">Ticket Bundle</label>
+            <select id="stock_id" name="stock_id" class="form-select" required>
+              <option value="" disabled>Select a ride first...</option>
+              <% availableStock.forEach(s => { %>
+                <option value="<%= s.id %>" data-rate="<%= s.rate %>" class="d-none stock-option" <%= distribution.stock_id === s.id ? 'selected' : '' %>>
+                  <%= s.color %> bundle (₹<%= s.rate %>) | Nos: <%= s.start_number %> - <%= s.end_number %>
+                </option>
+              <% }) %>
+            </select>
+          </div>
         </div>
-        <div class="col-md-5">
-          <label for="ride_id" class="form-label">Ride</label>
-          <select id="ride_id" name="ride_id" class="form-select" required>
-            <% rides.forEach(ride => { %>
-              <option value="<%= ride.id %>" <%= distribution.rate_id == ride.id ? 'selected' : '' %>><%= ride.name %> (₹<%= ride.rate %>)</option>
-            <% }) %>
-          </select>
-        </div>
-        <div class="col-md-2">
-          <button type="submit" class="btn btn-primary w-100">Update</button>
+        <div class="mt-4">
+          <button type="submit" class="btn btn-primary">Update Distribution</button>
+          <a href="/ticketing/distribute" class="btn btn-secondary">Cancel</a>
         </div>
       </form>
     </div>
   </div>
-
-  <a href="/ticketing/distribute" class="btn btn-secondary">« Back to Distribute Tickets</a>
 </div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const rideSelect = document.getElementById('ride_id');
+    const stockSelect = document.getElementById('stock_id');
+    const stockOptions = document.querySelectorAll('.stock-option');
+
+    function filterStock() {
+      const selectedRideOption = rideSelect.options[rideSelect.selectedIndex];
+      const selectedRate = selectedRideOption.getAttribute('data-rate');
+      
+      stockOptions.forEach(option => {
+        if (option.getAttribute('data-rate') === selectedRate || option.selected) {
+          option.classList.remove('d-none');
+        } else {
+          option.classList.add('d-none');
+        }
+      });
+    }
+
+    rideSelect.addEventListener('change', filterStock);
+    filterStock(); // Run on page load
+  });
+</script>
 
 <%- include('partials/footer') %>

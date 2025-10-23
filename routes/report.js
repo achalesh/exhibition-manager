@@ -16,7 +16,8 @@ router.get('/', (req, res) => {
 router.get('/payment-received', async (req, res) => {
   try {
     const viewingSessionId = res.locals.viewingSession.id;
-    const { start_date, end_date, q } = req.query;
+    const { start_date, end_date, q, category = 'all', page = 1 } = req.query;
+    const limit = 25; // Number of items per page
 
     let sql = `
       SELECT
@@ -56,14 +57,50 @@ router.get('/payment-received', async (req, res) => {
       whereClauses.push('(b.exhibitor_name LIKE ? OR s.name LIKE ? OR p.receipt_number LIKE ?)');
       params.push(`%${q}%`, `%${q}%`, `%${q}%`);
     }
+    if (category && category !== 'all') {
+      const categoryMap = {
+        'Rent': 'p.rent_paid > 0',
+        'Electric': 'p.electric_paid > 0',
+        'Material': 'p.material_paid > 0',
+        'Shed': 'p.shed_paid > 0'
+      };
+      if (categoryMap[category]) {
+        whereClauses.push(categoryMap[category]);
+      }
+    }
 
-    const fullSql = `${sql} WHERE ${whereClauses.join(' AND ')} ORDER BY p.payment_date DESC, p.id DESC`;
-    const payments = await all(fullSql, params);
+    const whereSql = `WHERE ${whereClauses.join(' AND ')}`;
+
+    // Get total count and summary for the filtered data
+    const summarySql = `SELECT COUNT(*) as count, SUM(p.cash_paid) as total_cash, SUM(p.upi_paid) as total_upi, SUM(p.cash_paid + p.upi_paid) as total_paid FROM payments p JOIN bookings b ON p.booking_id = b.id JOIN spaces s ON b.space_id = s.id ${whereSql}`;
+    const summaryResult = await get(summarySql, params);
+
+    const totalItems = summaryResult.count || 0;
+    const totalPages = Math.ceil(totalItems / limit);
+    const currentPage = parseInt(page);
+    const offset = (currentPage - 1) * limit;
+
+    const fullSql = `${sql} ${whereSql} ORDER BY p.payment_date DESC, p.id DESC LIMIT ? OFFSET ?`;
+    const payments = await all(fullSql, [...params, limit, offset]);
+
+    const pagination = {
+      currentPage,
+      totalPages,
+      hasPrevPage: currentPage > 1,
+      hasNextPage: currentPage < totalPages,
+      totalItems
+    };
 
     res.render('paymentReceivedReport', {
       title: 'Payment Received Report',
       payments,
-      filters: { start_date: start_date || '', end_date: end_date || '', q: q || '' }
+      pagination,
+      summary: {
+        total_cash: summaryResult.total_cash || 0,
+        total_upi: summaryResult.total_upi || 0,
+        total_paid: summaryResult.total_paid || 0,
+      },
+      filters: { start_date: start_date || '', end_date: end_date || '', q: q || '', category }
     });
 
   } catch (err) {
@@ -76,7 +113,7 @@ router.get('/payment-received', async (req, res) => {
 router.get('/payment-received/csv', async (req, res) => {
   try {
     const viewingSessionId = res.locals.viewingSession.id;
-    const { start_date, end_date, q } = req.query;
+    const { start_date, end_date, q, category } = req.query;
 
     // This query is identical to the one in the main report route
     const sql = `SELECT p.payment_date, p.receipt_number, b.exhibitor_name, s.name as space_name, CASE WHEN p.rent_paid > 0 THEN 'Rent' WHEN p.electric_paid > 0 THEN 'Electric' WHEN p.material_paid > 0 THEN 'Material' WHEN p.shed_paid > 0 THEN 'Shed' ELSE 'Unknown' END as payment_category, p.payment_mode, p.cash_paid, p.upi_paid, (p.cash_paid + p.upi_paid) as total_paid FROM payments p JOIN bookings b ON p.booking_id = b.id JOIN spaces s ON b.space_id = s.id`;
@@ -86,6 +123,17 @@ router.get('/payment-received/csv', async (req, res) => {
     if (start_date) { whereClauses.push('p.payment_date >= ?'); params.push(start_date); }
     if (end_date) { whereClauses.push('p.payment_date <= ?'); params.push(end_date); }
     if (q) { whereClauses.push('(b.exhibitor_name LIKE ? OR s.name LIKE ? OR p.receipt_number LIKE ?)'); params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
+    if (category && category !== 'all') {
+      const categoryMap = {
+        'Rent': 'p.rent_paid > 0',
+        'Electric': 'p.electric_paid > 0',
+        'Material': 'p.material_paid > 0',
+        'Shed': 'p.shed_paid > 0'
+      };
+      if (categoryMap[category]) {
+        whereClauses.push(categoryMap[category]);
+      }
+    }
 
     const fullSql = `${sql} WHERE ${whereClauses.join(' AND ')} ORDER BY p.payment_date DESC, p.id DESC`;
     const payments = await all(fullSql, params);
@@ -524,6 +572,106 @@ router.get('/shed-list', async (req, res) => {
     res.render('reportShedList', { title: 'Shed Allocation Report', allocations });
   } catch (err) {
     console.error('Error generating shed allocation report:', err);
+    res.status(500).send('Error generating report.');
+  }
+});
+
+router.get('/sales-by-staff', async (req, res) => {
+  try {
+    const viewingSessionId = res.locals.viewingSession.id;
+    const { start_date, end_date } = req.query;
+
+    let sql = `
+      SELECT
+        s.name as staff_name,
+        SUM(td.tickets_sold) as total_tickets_sold,
+        SUM(td.calculated_revenue) as total_revenue,
+        SUM(td.upi_amount) as total_upi,
+        SUM(td.cash_amount) as total_cash
+      FROM ticket_distributions td
+      JOIN booking_staff s ON td.staff_id = s.id
+    `;
+
+    const whereClauses = ["td.status = 'Settled'", 'td.event_session_id = ?'];
+    const params = [viewingSessionId];
+
+    if (start_date) {
+      whereClauses.push('td.settlement_date >= ?');
+      params.push(start_date);
+    }
+    if (end_date) {
+      whereClauses.push('td.settlement_date <= ?');
+      params.push(end_date);
+    }
+
+    sql += ` WHERE ${whereClauses.join(' AND ')} GROUP BY s.id, s.name ORDER BY total_revenue DESC`;
+
+    const salesByStaff = await all(sql, params);
+
+    res.render('salesByStaffReport', {
+      title: 'Sales by Staff Report',
+      salesByStaff,
+      filters: { start_date: start_date || '', end_date: end_date || '' }
+    });
+
+  } catch (err) {
+    console.error('Error generating sales by staff report:', err);
+    res.status(500).send('Error generating report.');
+  }
+});
+
+router.get('/sales-by-staff/:id', async (req, res) => {
+  try {
+    const viewingSessionId = res.locals.viewingSession.id;
+    const staffId = req.params.id;
+    const { start_date, end_date } = req.query;
+
+    const staff = await get('SELECT name FROM booking_staff WHERE id = ?', [staffId]);
+    if (!staff) {
+      req.session.flash = { type: 'danger', message: 'Staff member not found.' };
+      return res.redirect('/report/sales-by-staff');
+    }
+
+    let sql = `
+      SELECT
+        r.name as ride_name,
+        r.rate,
+        SUM(td.tickets_sold) as total_tickets_sold,
+        SUM(td.calculated_revenue) as total_revenue
+      FROM ticket_distributions td
+      JOIN rides r ON td.ride_id = r.id
+      WHERE td.staff_id = ? AND td.status = 'Settled' AND td.event_session_id = ?
+    `;
+    const params = [staffId, viewingSessionId];
+
+    if (start_date) {
+      sql += ' AND td.settlement_date >= ?';
+      params.push(start_date);
+    }
+    if (end_date) {
+      sql += ' AND td.settlement_date <= ?';
+      params.push(end_date);
+    }
+
+    sql += ' GROUP BY r.id, r.name, r.rate ORDER BY total_revenue DESC';
+
+    const details = await all(sql, params);
+
+    // Prepare data for the pie chart
+    const pieChartData = {
+      labels: details.map(d => d.ride_name),
+      data: details.map(d => d.total_revenue)
+    };
+
+    res.render('salesByStaffDetail', {
+      title: `Sales Details for ${staff.name}`,
+      staff,
+      details,
+      pieChartData,
+      filters: { start_date: start_date || '', end_date: end_date || '' }
+    });
+  } catch (err) {
+    console.error('Error generating detailed sales by staff report:', err);
     res.status(500).send('Error generating report.');
   }
 });
