@@ -1,0 +1,83 @@
+<%- include('partials/header') %>
+
+<div class="container mt-4">
+    <%- include('partials/ticketingNav') %>
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1><%= title %></h1>
+        <a href="/ticketing/report/daily-sales/csv" class="btn btn-success">
+            <i class="bi bi-download me-2"></i> Download Full Report (CSV)
+        </a>
+    </div>
+
+    <!-- Filter Form -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form action="/ticketing/report/daily-sales" method="GET">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label for="start_date" class="form-label">Start Date</label>
+                        <input type="date" class="form-control" id="start_date" name="start_date" value="<%= filters.start_date %>">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="end_date" class="form-label">End Date</label>
+                        <input type="date" class="form-control" id="end_date" name="end_date" value="<%= filters.end_date %>">
+                    </div>
+                    <div class="col-md-auto">
+                        <button type="submit" class="btn btn-primary">Filter</button>
+                        <a href="/ticketing/report/daily-sales" class="btn btn-secondary">Clear</a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Report Table -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Date</th>
+                            <th class="text-end">Total Tickets Sold</th>
+                            <th class="text-end">Cash Collection (₹)</th>
+                            <th class="text-end">UPI Collection (₹)</th>
+                            <th class="text-end">Total Revenue (₹)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% if (dailySales.length > 0) { %>
+                            <% dailySales.forEach(day => { %>
+                                <tr>
+                                    <td><%= new Date(day.settlement_date).toLocaleDateString() %></td>
+                                    <td class="text-end"><%= day.total_tickets_sold %></td>
+                                    <td class="text-end"><%= (day.total_cash || 0).toFixed(2) %></td>
+                                    <td class="text-end"><%= (day.total_upi || 0).toFixed(2) %></td>
+                                    <td class="text-end fw-bold"><%= day.total_revenue.toFixed(2) %></td>
+                                </tr>
+                            <% }) %>
+                        <% } else { %>
+                            <tr><td colspan="5" class="text-center text-muted">No sales data found for the selected period.</td></tr>
+                        <% } %>
+                    </tbody>
+                    <tfoot class="table-dark">
+                        <% const total = dailySales.reduce((acc, day) => {
+                            acc.tickets += day.total_tickets_sold;
+                            acc.revenue += day.total_revenue;
+                            return acc;
+                        }, { tickets: 0, revenue: 0 }); %>
+                        <tr>
+                            <td class="text-end fw-bold">Total</td>
+                            <td class="text-end fw-bold"><%= total.tickets %></td>
+                            <td colspan="2"></td>
+                            <td class="text-end fw-bold"><%= total.revenue.toFixed(2) %></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include('partials/footer') %>

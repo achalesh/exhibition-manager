@@ -93,6 +93,36 @@
   </div>
 </div>
 
+<% if (user && user.role === 'admin' && recentActivities && recentActivities.length > 0) { %>
+<!-- Recent Activity Feed -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header">
+    <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Recent Activity</h5>
+  </div>
+  <div class="card-body p-0">
+    <ul class="list-group list-group-flush">
+      <% recentActivities.forEach(activity => { %>
+        <li class="list-group-item">
+          <div class="d-flex w-100 justify-content-between">
+            <p class="mb-1">
+              <strong class="text-primary"><%= activity.username %></strong>
+              <%= activity.action.replace(/_/g, ' ') %>:
+              <span class="text-muted"><%= activity.details %></span>
+            </p>
+            <small class="text-nowrap text-muted" title="<%= new Date(activity.timestamp).toLocaleString() %>">
+              <%= new Date(activity.timestamp).toLocaleDateString() %>
+            </small>
+          </div>
+        </li>
+      <% }); %>
+    </ul>
+  </div>
+  <div class="card-footer text-center">
+    <a href="/report/audit-log" class="text-decoration-none">View Full Audit Log →</a>
+  </div>
+</div>
+<% } %>
+
 <hr>
 
 <% if (userNotifications && userNotifications.length > 0) { %>
@@ -217,16 +247,13 @@
         <div class="card-body">
             <div class="row g-2">
                 <% spacesByType[type].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })).forEach(space => { %>
-                    <div class="col-12 col-sm-6 col-md-4 col-lg-3">
-                        <a href="/booking/details-full-by-space/<%= space.id %>" class="space-card text-decoration-none d-block h-100 <%= space.session_status === 'Booked' ? 'booked' : 'available' %>" title="Click for details">
-                            <div class="p-2">
-                                <div class="d-flex justify-content-between">
-                                    <div class="space-name fw-bold"><%= space.name %></div>
-                                    <div class="space-status small"><%= space.session_status %></div>
+                    <div class="col-6 col-sm-4 col-md-3 col-lg-2">
+                        <a href="/booking/details-full-by-space/<%= space.id %>" class="space-card-link">
+                            <div class="space-card <%= space.session_status.toLowerCase() %>">
+                                <div class="space-card-name"><%= space.name %></div>
+                                <div class="space-card-status">
+                                    <%= space.session_status === 'Booked' ? (space.facia_name || 'Booked') : 'Available' %>
                                 </div>
-                                <% if (space.session_status === 'Booked' && space.facia_name) { %>
-                                    <div class="facia-name small text-muted text-truncate" title="<%= space.facia_name %>"><%= space.facia_name %></div>
-                                <% } %>
                             </div>
                         </a>
                     </div>
@@ -239,63 +266,64 @@
 
 <% if (user && user.role === 'admin') { %>
 <!-- Payment Collection Summary -->
-<div class="card mb-4 glass-card">
+<div class="card shadow-sm mb-4">
   <div class="card-header">
-    <h4>Payment Collection Summary</h4>
+    <h4 class="mb-0"><i class="bi bi-wallet2 me-2"></i>Payment Collection Summary</h4>
   </div>
   <div class="card-body">
-    <div class="table-responsive">
-      <table class="table table-bordered table-hover text-center">
-        <thead class="table-light">
-          <tr>
-            <th>Category</th>
-            <th>Total Amount (₹)</th>
-            <th>Amount Received (₹)</th>
-            <th>Balance Due (₹)</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>Rent</strong></td>
-            <td><a href="/report/dues?category=rent" class="text-decoration-none fw-bold"><%= financials.rent.charged.toFixed(2) %></a></td>
-            <td class="text-success"><a href="/report/payments?category=rent" class="text-decoration-none text-success fw-bold"><%= financials.rent.paid.toFixed(2) %></a></td>
-            <td class="fw-bold <%= financials.rent.due > 0 ? 'text-danger' : '' %>"><%= financials.rent.due.toFixed(2) %></td>
-          </tr>
-          <tr>
-            <td><strong>Electric</strong></td>
-            <td><a href="/report/dues?category=electric" class="text-decoration-none fw-bold"><%= financials.electric.charged.toFixed(2) %></a></td>
-            <td class="text-success"><a href="/report/payments?category=electric" class="text-decoration-none text-success fw-bold"><%= financials.electric.paid.toFixed(2) %></a></td>
-            <td class="fw-bold <%= financials.electric.due > 0 ? 'text-danger' : '' %>"><%= financials.electric.due.toFixed(2) %></td>
-          </tr>
-          <tr>
-            <td><strong>Material</strong></td>
-            <td><a href="/report/dues?category=material" class="text-decoration-none fw-bold"><%= financials.material.charged.toFixed(2) %></a></td>
-            <td class="text-success"><a href="/report/payments?category=material" class="text-decoration-none text-success fw-bold"><%= financials.material.paid.toFixed(2) %></a></td>
-            <td class="fw-bold <%= financials.material.due > 0 ? 'text-danger' : '' %>"><%= financials.material.due.toFixed(2) %></td>
-          </tr>
-          <tr>
-            <td><strong>Shed</strong></td>
-            <td><a href="/report/dues?category=shed" class="text-decoration-none fw-bold"><%= financials.shed.charged.toFixed(2) %></a></td>
-            <td class="text-success"><a href="/report/payments?category=shed" class="text-decoration-none text-success fw-bold"><%= financials.shed.paid.toFixed(2) %></a></td>
-            <td class="fw-bold <%= financials.shed.due > 0 ? 'text-danger' : '' %>"><%= financials.shed.due.toFixed(2) %></td>
-          </tr>
-        </tbody>
-        <tfoot class="table-dark">
-          <%
-            const grandTotalCharged = financials.rent.charged + financials.electric.charged + financials.material.charged + financials.shed.charged;
-            const grandTotalPaid = financials.rent.paid + financials.electric.paid + financials.material.paid + financials.shed.paid;
-            const grandTotalDue = financials.rent.due + financials.electric.due + financials.material.due + financials.shed.due;
-          %>
-          <tr>
-            <td class="text-end"><strong>Grand Total</strong></td>
-            <td><strong><%= grandTotalCharged.toFixed(2) %></strong></td>
-            <td class="text-success"><strong><%= grandTotalPaid.toFixed(2) %></strong></td>
-            <td class="fw-bold <%= grandTotalDue > 0 ? 'text-danger' : '' %>">
-              <strong><%= grandTotalDue.toFixed(2) %></strong>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <div class="row">
+      <% 
+        const categories = [
+          { name: 'Rent', data: financials.rent, icon: 'bi-house-door-fill', color: 'primary' },
+          { name: 'Electric', data: financials.electric, icon: 'bi-lightning-charge-fill', color: 'warning' },
+          { name: 'Material', data: financials.material, icon: 'bi-box-seam-fill', color: 'info' },
+          { name: 'Shed', data: financials.shed, icon: 'bi-shop', color: 'success' }
+        ];
+        const grandTotal = {
+          charged: categories.reduce((sum, cat) => sum + cat.data.charged, 0),
+          paid: categories.reduce((sum, cat) => sum + cat.data.paid, 0),
+        };
+        grandTotal.due = grandTotal.charged - grandTotal.paid;
+      %>
+
+      <!-- Grand Total Card -->
+      <div class="col-lg-12 mb-4">
+        <div class="card financial-summary-card total-summary-card">
+          <div class="card-body">
+            <h5 class="card-title">Grand Total</h5>
+            <p class="card-text total-amount">₹<%= grandTotal.paid.toLocaleString('en-IN') %> / <small>₹<%= grandTotal.charged.toLocaleString('en-IN') %></small></p>
+            <% const totalPercentage = grandTotal.charged > 0 ? (grandTotal.paid / grandTotal.charged) * 100 : 0; %>
+            <div class="progress" style="height: 10px;">
+              <div class="progress-bar bg-light" role="progressbar" style="width: <%= totalPercentage.toFixed(2) %>%" aria-valuenow="<%= totalPercentage.toFixed(2) %>" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <div class="d-flex justify-content-between mt-2">
+              <span class="text-light">Collected</span>
+              <span class="text-light">Due: ₹<%= grandTotal.due.toLocaleString('en-IN') %></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Individual Category Cards -->
+      <% categories.forEach(cat => { %>
+        <div class="col-lg-3 col-md-6 mb-4">
+          <div class="card financial-summary-card h-100">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="card-title mb-0"><%= cat.name %></h6>
+                <i class="<%= cat.icon %> fs-4 text-<%= cat.color %>"></i>
+              </div>
+              <% const percentage = cat.data.charged > 0 ? (cat.data.paid / cat.data.charged) * 100 : 0; %>
+              <div class="progress mb-2" style="height: 5px;">
+                <div class="progress-bar bg-<%= cat.color %>" role="progressbar" style="width: <%= percentage.toFixed(2) %>%" aria-valuenow="<%= percentage.toFixed(2) %>" aria-valuemin="0" aria-valuemax="100"></div>
+              </div>
+              <p class="card-text small mb-1"><strong>Paid:</strong> ₹<%= cat.data.paidFormatted %></p>
+              <p class="card-text small mb-1"><strong>Due:</strong> <span class="fw-bold <%= cat.data.due > 0 ? 'text-danger' : '' %>">₹<%= cat.data.dueFormatted %></span></p>
+              <p class="card-text small text-muted"><strong>Total:</strong> ₹<%= cat.data.chargedFormatted %></p>
+            </div>
+          </div>
+        </div>
+      <% }) %>
     </div>
   </div>
 </div>
@@ -306,74 +334,111 @@
 <%- include('partials/footer') %>
 
 <script>
-  document.addEventListener('DOMContentLoaded', function() {
-    // 1. Space Allocation Chart (Pie Chart)
-    const spaceCtx = document.getElementById('spaceAllocationChart');
-    if (spaceCtx) {
-      const spaceData = <%- JSON.stringify(statusCounts) %>;
-      new Chart(spaceCtx, {
-        type: 'doughnut',
-        data: {
-          labels: ['Available', 'Booked'],
-          datasets: [{
-            label: 'Spaces',
-            data: [spaceData.Available || 0, spaceData.Booked || 0],
-            backgroundColor: [
-              'rgba(25, 135, 84, 0.7)', // Green for Available
-              'rgba(220, 53, 69, 0.7)'   // Red for Booked
-            ],
-            borderColor: [
-              'rgba(25, 135, 84, 1)',
-              'rgba(220, 53, 69, 1)'
-            ],
-            borderWidth: 1
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              position: 'top',
-            }
-          }
-        }
-      });
-    }
+    document.addEventListener('DOMContentLoaded', function() {
+        // 1. Space Allocation Chart (Doughnut Chart)
+        const spaceCtx = document.getElementById('spaceAllocationChart');
+        if (spaceCtx) {
+            const spaceData = <%- JSON.stringify(statusCounts) %>;
+            const totalSpaces = (spaceData.Available || 0) + (spaceData.Booked || 0);
+            const bookedPercentage = totalSpaces > 0 ? ((spaceData.Booked || 0) / totalSpaces * 100).toFixed(1) : 0;
 
-    // 2. Payment Collection Chart (Bar Chart)
-    const paymentCtx = document.getElementById('paymentCollectionChart');
-    if (paymentCtx) {
-      const financialsData = <%- JSON.stringify(financials) %>;
-      new Chart(paymentCtx, {
-        type: 'bar',
-        data: {
-          labels: ['Rent', 'Electric', 'Material', 'Shed'],
-          datasets: [
-            {
-              label: 'Amount Received',
-              data: [financialsData.rent.paid, financialsData.electric.paid, financialsData.material.paid, financialsData.shed.paid],
-              backgroundColor: 'rgba(25, 135, 84, 0.7)', // Green
-            },
-            {
-              label: 'Balance Due',
-              data: [financialsData.rent.due, financialsData.electric.due, financialsData.material.due, financialsData.shed.due],
-              backgroundColor: 'rgba(220, 53, 69, 0.7)', // Red
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            title: { display: true, text: 'Charged = Received + Due' }
-          },
-          scales: { 
-            x: { stacked: true },
-            y: { stacked: true, beginAtZero: true } 
-          }
+            new Chart(spaceCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Available', 'Booked'],
+                    datasets: [{
+                        label: 'Spaces',
+                        data: [spaceData.Available || 0, spaceData.Booked || 0],
+                        backgroundColor: [
+                            '#1d976c', // Green for Available
+                            '#d31027' // Red for Booked
+                        ],
+                        borderColor: '#ffffff',
+                        borderWidth: 2,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed !== null) {
+                                        label += context.parsed;
+                                    }
+                                    return label;
+                                }
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: `${bookedPercentage}% Booked`,
+                            position: 'bottom',
+                            align: 'center',
+                            font: { size: 18, weight: 'bold' },
+                            padding: { top: 20, bottom: 0 }
+                        }
+                    }
+                }
+            });
         }
-      });
-    }
-  });
+
+        // 2. Payment Collection Chart (Grouped Bar Chart)
+        const paymentCtx = document.getElementById('paymentCollectionChart');
+        if (paymentCtx) {
+            const financialsData = <%- JSON.stringify(financials) %>;
+            new Chart(paymentCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Rent', 'Electric', 'Material', 'Shed'],
+                    datasets: [{
+                        label: 'Total Charged',
+                        data: [financialsData.rent.charged, financialsData.electric.charged, financialsData.material.charged, financialsData.shed.charged],
+                        backgroundColor: 'rgba(0, 114, 255, 0.5)', // Blue
+                        borderColor: 'rgba(0, 114, 255, 1)',
+                        borderWidth: 1
+                    }, {
+                        label: 'Amount Received',
+                        data: [financialsData.rent.paid, financialsData.electric.paid, financialsData.material.paid, financialsData.shed.paid],
+                        backgroundColor: 'rgba(29, 151, 108, 0.7)', // Green
+                        borderColor: 'rgba(29, 151, 108, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                        },
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '₹' + value.toLocaleString('en-IN');
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    });
 </script>

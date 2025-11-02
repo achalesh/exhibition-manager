@@ -45,13 +45,14 @@
                 <i class="bi bi-journal-plus me-1"></i>Allocation
               </a>
               <ul class="dropdown-menu" aria-labelledby="navbarAllocation">
-                <li><a class="dropdown-item" href="/material/issue"><i class="bi bi-box-seam me-2"></i>Issue Materials</a></li>
+                <li><a class="dropdown-item" href="/materials/issue"><i class="bi bi-qr-code-scan me-2"></i>Issue Materials (QR)</a></li>
+                <li><a class="dropdown-item" href="/materials/return"><i class="bi bi-box-arrow-in-down-left me-2"></i>Return Materials (QR)</a></li>
                 <li><a class="dropdown-item" href="/electric/add"><i class="bi bi-lightning-charge me-2"></i>Electric Bill</a></li>
                 <li><a class="dropdown-item" href="/shed/allocate"><i class="bi bi-building-add me-2"></i>Allocate Shed</a></li>
               </ul>
             </li>
           <% } %>
-          <% if (user && user.role === 'admin') { %>
+          <% if (user && (user.role === 'admin' || user.role === 'ticketing_manager')) { %>
             <li class="nav-item dropdown">
               <a class="nav-link dropdown-toggle" href="#" id="navbarTicketing" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="bi bi-ticket-perforated me-1"></i>Ticketing
@@ -59,16 +60,13 @@
               <ul class="dropdown-menu" aria-labelledby="navbarTicketing">
                 <li><a class="dropdown-item" href="/ticketing"><i class="bi bi-bar-chart-line me-2"></i>Dashboard</a></li>
                 <li><hr class="dropdown-divider"></li>
-                <li><a class="dropdown-item" href="/ticketing/stock"><i class="bi bi-stack me-2"></i>Manage Stock</a></li>
                 <li><a class="dropdown-item" href="/ticketing/rides"><i class="bi bi-joystick me-2"></i>Manage Rides</a></li>
-                <li><hr class="dropdown-divider"></li>
-                <li><a class="dropdown-item" href="/ticketing/distribute"><i class="bi bi-send me-2"></i>Distribute</a></li>
-                <li><a class="dropdown-item" href="/ticketing/settle"><i class="bi bi-receipt-cutoff me-2"></i>Settle Sales</a></li>
-                <li><hr class="dropdown-divider"></li>
-                <li><a class="dropdown-item" href="/ticketing/import"><i class="bi bi-upload me-2"></i>Import Sales</a></li>
+                <li><a class="dropdown-item" href="/ticketing/stock"><i class="bi bi-stack me-2"></i>Manage Stock</a></li>
+                <li><a class="dropdown-item" href="/ticketing/distribute"><i class="bi bi-send me-2"></i>Distribute Tickets</a></li>
               </ul>
             </li>
-            <li class="nav-item dropdown">
+          <% } %>
+          <% if (user && user.role === 'admin') { %><li class="nav-item dropdown">
               <a class="nav-link dropdown-toggle" href="#" id="navbarReports" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="bi bi-file-earmark-bar-graph me-1"></i>Reports
               </a>
@@ -84,6 +82,8 @@
               <ul class="dropdown-menu" aria-labelledby="navbarSettings">
                 <li><a class="dropdown-item" href="/space/add"><i class="bi bi-grid me-2"></i>Manage Spaces</a></li>
                 <li><a class="dropdown-item" href="/shed/manage"><i class="bi bi-building-gear me-2"></i>Manage Sheds</a></li>
+                <li><a class="dropdown-item" href="/electric-items"><i class="bi bi-lightning-charge me-2"></i>Manage Electric Items</a></li>
+                <li><a class="dropdown-item" href="/materials"><i class="bi bi-boxes me-2"></i>Manage Materials</a></li>
                 <li><a class="dropdown-item" href="/staff/list"><i class="bi bi-people me-2"></i>Manage Staff</a></li>
                 <li><hr class="dropdown-divider"></li>
                 <% if (user && (user.role === 'admin' || user.role === 'accountant')) { %>

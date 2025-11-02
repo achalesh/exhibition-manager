@@ -1,233 +1,85 @@
 <%- include('partials/header') %>
 
-<div class="container-fluid">
-  <%- include('partials/ticketingNav') %>
+<div class="container mt-4">
+    <%- include('partials/ticketingNav') %>
 
-  <!-- Filter Form -->
-  <div class="card shadow-sm mb-4">
-    <div class="card-body">
-      <form method="GET" action="/ticketing" class="row g-3 align-items-end">
-        <div class="col-md-4">
-          <label for="start_date" class="form-label">Start Date</label>
-          <input type="date" class="form-control" id="start_date" name="start_date" value="<%= filters.start_date || '' %>">
-        </div>
-        <div class="col-md-4">
-          <label for="end_date" class="form-label">End Date</label>
-          <input type="date" class="form-control" id="end_date" name="end_date" value="<%= filters.end_date || '' %>">
-        </div>
-        <div class="col-md-2">
-          <button type="submit" class="btn btn-primary w-100">Filter</button>
-        </div>
-        <div class="col-md-2">
-          <a href="/ticketing" class="btn btn-outline-secondary w-100">Clear</a>
-        </div>
-      </form>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><%= title %></h1>
     </div>
-  </div>
 
-  <!-- Summary Cards -->
-  <div class="row">
-    <div class="col-xl-3 col-md-6 mb-4">
-      <div class="card border-left-primary shadow h-100 py-2">
-        <div class="card-body">
-          <div class="row no-gutters align-items-center">
-            <div class="col mr-2">
-              <div class="text-xs fw-bold text-primary text-uppercase mb-1">Total Revenue</div>
-              <div class="h5 mb-0 fw-bold text-gray-800">₹<%= summary.total_revenue.toLocaleString('en-IN') %></div>
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Total Revenue</h5>
+                    <p class="card-text fs-4 fw-bold">₹<%= (summary.total_revenue || 0).toLocaleString('en-IN') %></p>
+                </div>
             </div>
-            <div class="col-auto"><i class="bi bi-currency-rupee fs-2 text-gray-300"></i></div>
-          </div>
         </div>
-      </div>
-    </div>
-    <div class="col-xl-3 col-md-6 mb-4">
-      <div class="card border-left-success shadow h-100 py-2">
-        <div class="card-body">
-          <div class="row no-gutters align-items-center">
-            <div class="col mr-2">
-              <div class="text-xs fw-bold text-success text-uppercase mb-1">Tickets Sold</div>
-              <div class="h5 mb-0 fw-bold text-gray-800"><%= summary.total_tickets_sold.toLocaleString('en-IN') %></div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Tickets Sold</h5>
+                    <p class="card-text fs-4 fw-bold"><%= (summary.total_tickets_sold || 0).toLocaleString('en-IN') %></p>
+                </div>
             </div>
-            <div class="col-auto"><i class="bi bi-ticket-detailed fs-2 text-gray-300"></i></div>
-          </div>
         </div>
-      </div>
-    </div>
-    <div class="col-xl-3 col-md-6 mb-4">
-      <div class="card border-left-info shadow h-100 py-2">
-        <div class="card-body">
-          <div class="row no-gutters align-items-center">
-            <div class="col mr-2">
-              <div class="text-xs fw-bold text-info text-uppercase mb-1">Cash Collected</div>
-              <div class="h5 mb-0 fw-bold text-gray-800">₹<%= summary.total_cash.toLocaleString('en-IN') %></div>
+        <div class="col-md-3">
+            <div class="card text-dark bg-warning h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Distributed Stock</h5>
+                    <p class="card-text fs-4 fw-bold"><%= (stockCounts.Distributed || 0).toLocaleString('en-IN') %> <small>books</small></p>
+                </div>
             </div>
-            <div class="col-auto"><i class="bi bi-cash-stack fs-2 text-gray-300"></i></div>
-          </div>
         </div>
-      </div>
-    </div>
-    <div class="col-xl-3 col-md-6 mb-4">
-      <div class="card border-left-warning shadow h-100 py-2">
-        <div class="card-body">
-          <div class="row no-gutters align-items-center">
-            <div class="col mr-2">
-              <div class="text-xs fw-bold text-warning text-uppercase mb-1">UPI Collected</div>
-              <div class="h5 mb-0 fw-bold text-gray-800">₹<%= summary.total_upi.toLocaleString('en-IN') %></div>
+        <div class="col-md-3">
+            <div class="card text-dark bg-light h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Available Stock</h5>
+                    <p class="card-text fs-4 fw-bold"><%= (stockCounts.Available || 0).toLocaleString('en-IN') %> <small>books</small></p>
+                </div>
             </div>
-            <div class="col-auto"><i class="bi bi-phone-fill fs-2 text-gray-300"></i></div>
-          </div>
         </div>
-      </div>
     </div>
-  </div>
 
-  <!-- Charts Row -->
-  <div class="row">
-    <div class="col-xl-8">
-      <!-- Sales Chart -->
-      <div class="card shadow-sm mb-4">
-        <div class="card-header py-3">
-          <h6 class="m-0 fw-bold text-primary">Daily Sales Trend</h6>
-          <small class="text-muted">Showing revenue from the start of the event.</small>
+    <!-- Top Performers -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Top 5 Rides by Revenue</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        <% topRides.forEach(ride => { %>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <%= ride.ride_name %>
+                                <span class="badge bg-primary rounded-pill">₹<%= ride.total_revenue.toLocaleString('en-IN') %></span>
+                            </li>
+                        <% }) %>
+                    </ul>
+                </div>
+            </div>
         </div>
-        <div class="card-body">
-          <canvas id="salesChart"></canvas>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Top 5 Staff by Revenue</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        <% topStaff.forEach(staff => { %>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <%= staff.staff_name %>
+                                <span class="badge bg-success rounded-pill">₹<%= staff.total_revenue.toLocaleString('en-IN') %></span>
+                            </li>
+                        <% }) %>
+                    </ul>
+                </div>
+            </div>
         </div>
-      </div>
     </div>
-    <div class="col-xl-4">
-      <!-- Sales by Ride Chart (Pie) -->
-      <div class="card shadow-sm mb-4">
-        <div class="card-header py-3">
-          <h6 class="m-0 fw-bold text-primary">Revenue by Ride</h6>
-        </div>
-        <div class="card-body">
-          <canvas id="ridePieChart"></canvas>
-        </div>
-      </div>
-      <!-- Top 5 Rides List -->
-      <div class="card shadow-sm mb-4">
-        <div class="card-header py-3">
-          <h6 class="m-0 fw-bold text-primary">Top 5 Rides by Revenue</h6>
-        </div>
-        <div class="card-body">
-          <ul class="list-group list-group-flush">
-            <% topRides.forEach(ride => { %>
-              <li class="list-group-item d-flex justify-content-between align-items-center">
-                <%= ride.name %>
-                <span class="badge bg-primary rounded-pill">
-                  ₹<%= ride.revenue.toLocaleString('en-IN') %>
-                </span>
-              </li>
-            <% }) %>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Staff Sales Chart -->
-  <div class="card shadow-sm mb-4">
-    <div class="card-header py-3">
-      <h6 class="m-0 fw-bold text-primary">Revenue by Staff</h6>
-    </div>
-    <div class="card-body">
-      <div class="chart-container" style="position: relative; height:40vh; width:80vw">
-        <canvas id="staffSalesChart"></canvas>
-      </div>
-    </div>
-  </div>
-
-  <!-- Recent Sales Table -->
-  <div class="card shadow-sm">
-    <div class="card-header py-3">
-      <h6 class="m-0 fw-bold text-primary">Recent Settlements</h6>
-    </div>
-    <div class="card-body">
-      <div class="table-responsive">
-        <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
-          <thead>
-            <tr>
-              <th>Settled On</th>
-              <th>Ride</th>
-              <th>Staff</th>
-              <th class="text-end">Tickets Sold</th>
-              <th class="text-end">Revenue (₹)</th>
-              <th>Settled By</th>
-            </tr>
-          </thead>
-          <tbody>
-            <% sales.forEach(sale => { %>
-              <tr>
-                <td><%= new Date(sale.settlement_date).toLocaleDateString('en-IN') %></td>
-                <td><%= sale.ride_name %></td>
-                <td><%= sale.staff_name %></td>
-                <td class="text-end"><%= sale.tickets_sold %></td>
-                <td class="text-end"><%= sale.calculated_revenue.toFixed(2) %></td>
-                <td><%= sale.settled_by %></td>
-              </tr>
-            <% }) %>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
 </div>
-
-<script>
-  const ctx = document.getElementById('salesChart').getContext('2d');
-  new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: <%- JSON.stringify(trendChartData.labels) %>,
-      datasets: [{
-        label: 'Daily Revenue (₹)',
-        data: <%- JSON.stringify(trendChartData.data) %>,
-        backgroundColor: 'rgba(78, 115, 223, 0.8)',
-        borderColor: 'rgba(78, 115, 223, 1)',
-        borderWidth: 1
-      }]
-    },
-    options: { scales: { y: { beginAtZero: true } } }
-  });
-
-  const pieCtx = document.getElementById('ridePieChart').getContext('2d');
-  new Chart(pieCtx, {
-    type: 'pie',
-    data: {
-      labels: <%- JSON.stringify(pieChartData.labels) %>,
-      datasets: [{
-        data: <%- JSON.stringify(pieChartData.data) %>,
-        backgroundColor: ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796', '#5a5c69', '#f8f9fc', '#dddfeb', '#4e73df'],
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: {
-          position: 'top',
-        }
-      }
-    }
-  });
-
-  const staffCtx = document.getElementById('staffSalesChart').getContext('2d');
-  new Chart(staffCtx, {
-    type: 'bar',
-    data: {
-      labels: <%- JSON.stringify(staffChartData.labels) %>,
-      datasets: [{
-        label: 'Revenue by Staff (₹)',
-        data: <%- JSON.stringify(staffChartData.data) %>,
-        backgroundColor: 'rgba(28, 200, 138, 0.8)',
-        borderColor: 'rgba(28, 200, 138, 1)',
-        borderWidth: 1
-      }]
-    },
-    options: {
-      scales: { y: { beginAtZero: true } }
-    }
-  });
-</script>
 
 <%- include('partials/footer') %>

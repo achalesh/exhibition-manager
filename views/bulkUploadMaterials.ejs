@@ -1,0 +1,37 @@
+<%- include('partials/header') %>
+
+<div class="container mt-4">
+    <div class="card mx-auto" style="max-width: 700px;">
+        <div class="card-header">
+            <h3><%= title %></h3>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-info">
+                <h5 class="alert-heading">CSV File Format Instructions</h5>
+                <p>Please ensure your CSV file has the following headers in the first row:</p>
+                <ul>
+                    <li><strong>name</strong>: The name of the material (e.g., "Plastic Chair").</li>
+                    <li><strong>description</strong>: An optional description (e.g., "Red, good condition").</li>
+                    <li><strong>quantity</strong>: The number of items to create for this material type. If omitted, it defaults to 1.</li>
+                </ul>
+                <p>Example:</p>
+<pre><code>name,description,quantity
+Wooden Table,"Large, 6-seater",5
+Spotlight,"50W LED",10
+</code></pre>
+            </div>
+
+            <form action="/materials/bulk-upload" method="POST" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="materialsCsv" class="form-label">Upload CSV File</label>
+                    <input type="file" class="form-control" id="materialsCsv" name="materialsCsv" accept=".csv" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary"><i class="bi bi-upload me-2"></i>Upload and Process</button>
+                <a href="/materials" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+
+<%- include('partials/footer') %>

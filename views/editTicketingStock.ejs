@@ -1,46 +1,55 @@
 <%- include('partials/header') %>
 
-<div class="container-fluid">
-  <h1 class="h3 mb-4"><%= title %></h1>
+<div class="container mt-4">
+    <div class="card mx-auto" style="max-width: 600px;">
+        <div class="card-header">
+            <h3><%= title %></h3>
+        </div>
+        <div class="card-body">
+            <form action="/ticketing/stock/edit/<%= item.id %>" method="POST">
+                <div class="mb-3">
+                    <label for="category_id" class="form-label">Category</label>
+                    <select class="form-select" id="category_id" name="category_id" required autofocus>
+                        <option value="">-- Select Category --</option>
+                        <% categories.forEach(cat => { %>
+                            <option value="<%= cat.id %>" <%= item.category_id === cat.id ? 'selected' : '' %>><%= cat.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
 
-  <div class="card shadow-sm mb-4">
-    <div class="card-header py-3">
-      <h6 class="m-0 fw-bold text-primary">Edit Ticket Stock #<%= stock.id %></h6>
-    </div>
-    <div class="card-body">
-      <form action="/ticketing/stock/edit/<%= stock.id %>" method="POST">
-        <div class="row g-3 align-items-end">
-        <div class="col-md-3">
-          <label for="rate" class="form-label">Rate (₹)</label>
-          <input type="number" class="form-control" id="rate" name="rate" step="0.01" value="<%= stock.rate %>" required autofocus>
-        </div>
-        <div class="col-md-3">
-          <label for="color" class="form-label">Color</label>
-          <input type="text" class="form-control" id="color" name="color" value="<%= stock.color %>" required>
-        </div>
-        <div class="col-md-2">
-          <label for="start_number" class="form-label">Starting Serial Number</label>
-          <input type="number" class="form-control" id="start_number" name="start_number" value="<%= stock.start_number %>" required>
-        </div>
-        <div class="col-md-2">
-          <label for="end_number" class="form-label">Ending Serial Number</label>
-          <input type="number" class="form-control" id="end_number" name="end_number" value="<%= stock.end_number %>" required>
-        </div>
-        <div class="col-md-2">
-          <button type="submit" class="btn btn-primary w-100">Update Stock</button>
-        </div>
-        </div>
-      </form>
-    </div>
-  </div>
+                <div class="mb-3">
+                    <label for="entry_date" class="form-label">Entry Date</label>
+                    <input type="date" class="form-control" id="entry_date" name="entry_date" value="<%= item.entry_date %>" required>
+                </div>
 
-  <a href="/ticketing/stock" class="btn btn-secondary">« Back to Manage Stock</a>
+                <div class="mb-3">
+                    <label for="rate" class="form-label">Rate (₹)</label>
+                    <input type="number" step="0.01" class="form-control" id="rate" name="rate" value="<%= item.rate %>" required>
+                </div>
+
+                <div class="mb-3">
+                    <label for="color" class="form-label">Color</label>
+                    <input type="text" class="form-control" id="color" name="color" value="<%= item.color %>">
+                </div>
+
+                <div class="row">
+                    <div class="col-6 mb-3">
+                        <label for="start_number" class="form-label">Start No.</label>
+                        <input type="number" class="form-control" id="start_number" name="start_number" value="<%= item.start_number %>" required>
+                    </div>
+                    <div class="col-6 mb-3">
+                        <label for="end_number" class="form-label">End No.</label>
+                        <input type="number" class="form-control" id="end_number" name="end_number" value="<%= item.end_number %>" required>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between">
+                    <button type="submit" class="btn btn-primary">Update Stock</button>
+                    <a href="/ticketing/stock" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
-
-<script>
-  document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('rate').focus();
-  });
-</script>
 
 <%- include('partials/footer') %>

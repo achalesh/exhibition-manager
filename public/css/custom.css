@@ -43,14 +43,84 @@ font-size: 1rem; margin: 0; padding: 0; box-sizing: border-box; }
 .card-total { background: linear-gradient(135deg, #4e54c8, #8f94fb); } .card-available { background: linear-gradient(135deg, #1d976c, #93f9b9); } .card-booked { background: linear-gradient(135deg, #d31027, #ea384d); } .card-categories { background: linear-gradient(135deg, #00c6ff, #0072ff); }
 
 .space-card { border: 1px solid #ccc; border-radius: 5px; text-align: center; color: #333; transition: transform 0.2s; height: 100%; display: flex; flex-direction: column; justify-content: center; }
-
 .space-card:hover { transform: scale(1.05); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-
 .space-card.available { background-color: #d4edda; border-color: #c3e6cb; } .space-card.booked { background-color: #f8d7da; border-color: #f5c6cb; }
 
-.space-name { font-size: 1rem; color: deeppink; }
+/* New Space Layout Styles */
+.space-card-link {
+  text-decoration: none;
+}
 
-.space-status { color: #555; }tatus { color: #555; }
+.space-card {
+  border-radius: 8px;
+  padding: 12px 8px;
+  text-align: center;
+  transition: all 0.2s ease-in-out;
+  border: 1px solid transparent;
+  min-height: 70px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.space-card.available {
+  background-color: #e8f5e9; /* Light Green */
+  border-color: #a5d6a7;
+}
+
+.space-card.booked {
+  background-color: #fbe9e7; /* Light Red */
+  border-color: #ffab91;
+}
+
+.space-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+}
+
+.space-card-name {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.space-card-status {
+  font-size: 0.8rem;
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Financial Summary Cards */
+.financial-summary-card {
+  border: none;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.financial-summary-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.12);
+}
+
+.total-summary-card {
+  background: linear-gradient(135deg, #373B44, #4286f4);
+  color: white;
+}
+
+.total-summary-card .total-amount {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.total-summary-card .total-amount small {
+  font-size: 1.2rem;
+  font-weight: 400;
+  opacity: 0.8;
+}
 
 /* Responsive adjustments for smaller devices */ @media (max-width: 767.98px) {
    body { font-size: 2rem; } 

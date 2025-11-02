@@ -1,0 +1,129 @@
+<%- include('partials/header') %>
+
+<div class="container mt-4">
+    <div class="card mx-auto" style="max-width: 800px;">
+        <div class="card-header">
+            <h3><%= title %></h3>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <!-- Left side: Scanner -->
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label class="form-label"><strong>Set Return Status:</strong></label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="returnStatus" id="statusAvailable" value="Available" checked>
+                            <label class="form-check-label" for="statusAvailable">
+                                Available (Return to stock)
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="returnStatus" id="statusDamaged" value="Damaged">
+                            <label class="form-check-label" for="statusDamaged">
+                                Damaged (Mark as unusable)
+                            </label>
+                        </div>
+                    </div>
+                    <div id="scanner-container" class="border rounded bg-light" style="width: 100%; min-height: 300px;">
+                        <!-- The QR Code scanner will be rendered here -->
+                    </div>
+                    <div id="scanner-status" class="form-text mt-2">Position a QR code in the frame to return an item.</div>
+
+                    <div class="mt-4">
+                        <h5><strong>Or, Enter Manually:</strong></h5>
+                        <form id="manual-return-form">
+                            <div class="input-group">
+                                <input type="text" id="manual-unique-id" class="form-control" placeholder="Enter Material Unique ID">
+                                <button class="btn btn-outline-secondary" type="submit">Return Item</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Right side: Scan Log -->
+                <div class="col-md-6">
+                    <h5><strong>Scan Log</strong></h5>
+                    <div id="scan-log" class="border rounded p-2" style="height: 400px; overflow-y: auto; background-color: #f8f9fa;">
+                        <p class="text-muted">Returned items will appear here...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Include the QR Code scanning library -->
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const scannerStatus = document.getElementById('scanner-status');
+        const scanLog = document.getElementById('scan-log');
+        const manualForm = document.getElementById('manual-return-form');
+        const manualInput = document.getElementById('manual-unique-id');
+        const html5QrCode = new Html5Qrcode("scanner-container");
+
+        // Refactored function to handle the API call for returning an item
+        function returnItem(uniqueId) {
+            const returnStatus = document.querySelector('input[name="returnStatus"]:checked').value;
+
+            return fetch('/materials/api/return-item', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uniqueId: uniqueId, status: returnStatus })
+            })
+            .then(response => response.json())
+            .then(data => {
+                logMessage(data.message, data.success ? 'success' : 'danger');
+            })
+            .catch(err => {
+                logMessage('An error occurred. Please check the console.', 'danger');
+                console.error(err);
+            });
+        }
+
+        function onScanSuccess(decodedText, decodedResult) {
+            // Temporarily pause the scanner
+            html5QrCode.pause(true);
+            
+            returnItem(decodedText).finally(() => {
+                // Resume scanning after a short delay
+                setTimeout(() => html5QrCode.resume(), 1500);
+            });
+        }
+
+        manualForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            const uniqueId = manualInput.value.trim();
+            if (uniqueId) {
+                returnItem(uniqueId);
+                manualInput.value = ''; // Clear input after submission
+            }
+        }
+
+        function logMessage(message, type) {
+            const logEntry = document.createElement('div');
+            logEntry.className = `alert alert-${type} py-1 px-2 mb-1`;
+            logEntry.textContent = message;
+            
+            if (scanLog.querySelector('p.text-muted')) {
+                scanLog.innerHTML = '';
+            }
+
+            scanLog.prepend(logEntry);
+        }
+
+        // Start the scanner as soon as the page loads
+        html5QrCode.start(
+            { facingMode: "environment" }, // Use the rear camera
+            { fps: 10, qrbox: { width: 250, height: 250 } },
+            onScanSuccess,
+            (errorMessage) => { /* handle scan error */ }
+        ).catch(err => {
+            scannerStatus.textContent = 'Error starting scanner: ' + err;
+            console.error('Error starting scanner:', err);
+        });
+    });
+</script>
+
+<%- include('partials/footer') %>

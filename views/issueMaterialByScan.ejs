@@ -1,0 +1,141 @@
+<%- include('partials/header') %>
+
+<div class="container mt-4">
+    <div class="card mx-auto" style="max-width: 800px;">
+        <div class="card-header">
+            <h3><%= title %></h3>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <!-- Left side: Scanner and Client Selection -->
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="client-select" class="form-label"><strong>1. Select Client to Issue Materials To:</strong></label>
+                        <select id="client-select" class="form-select">
+                            <option value="">-- Please select a client --</option>
+                            <% clients.forEach(client => { %>
+                                <option value="<%= client.id %>"><%= client.name %> (<%= client.space_name %>)</option>
+                            <% }) %>
+                        </select>
+                    </div>
+
+                    <div id="scanner-container" class="border rounded bg-light" style="width: 100%; min-height: 300px;">
+                        <!-- The QR Code scanner will be rendered here -->
+                    </div>
+                    <div id="scanner-status" class="form-text mt-2">Please select a client to start scanning.</div>
+
+                    <div class="mt-4">
+                        <h5><strong>Or, Enter Manually:</strong></h5>
+                        <form id="manual-issue-form">
+                            <div class="input-group">
+                                <input type="text" id="manual-unique-id" class="form-control" placeholder="Enter Material Unique ID">
+                                <button class="btn btn-outline-secondary" type="submit">Issue Item</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Right side: Scan Log -->
+                <div class="col-md-6">
+                    <h5><strong>Scan Log</strong></h5>
+                    <div id="scan-log" class="border rounded p-2" style="height: 400px; overflow-y: auto; background-color: #f8f9fa;">
+                        <p class="text-muted">Scanned items will appear here...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Include the QR Code scanning library -->
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const clientSelect = document.getElementById('client-select');
+        const scannerStatus = document.getElementById('scanner-status');
+        const scanLog = document.getElementById('scan-log');
+        const manualForm = document.getElementById('manual-issue-form');
+        const manualInput = document.getElementById('manual-unique-id');
+        let html5QrCode;
+
+        // Refactored function to handle the API call for issuing an item
+        function issueItem(uniqueId) {
+            const clientId = clientSelect.value;
+            if (!clientId) {
+                logMessage('Please select a client first.', 'danger');
+                return Promise.reject('No client selected');
+            }
+
+            return fetch('/materials/api/issue-item', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uniqueId: uniqueId, clientId: clientId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                logMessage(data.message, data.success ? 'success' : 'danger');
+            })
+            .catch(err => {
+                logMessage('An error occurred. Please check the console.', 'danger');
+                console.error(err);
+            });
+        }
+
+        function onScanSuccess(decodedText, decodedResult) {
+            if (!clientSelect.value) {
+                logMessage('Please select a client before scanning.', 'danger');
+                return;
+            }
+
+            // Temporarily pause the scanner
+            html5QrCode.pause(true);
+            
+            issueItem(decodedText).finally(() => {
+                // Resume scanning after a short delay
+                setTimeout(() => html5QrCode.resume(), 1500);
+            });
+        }
+
+        function logMessage(message, type) {
+            const logEntry = document.createElement('div');
+            logEntry.className = `alert alert-${type} py-1 px-2 mb-1`;
+            logEntry.textContent = message;
+            
+            // If the log is empty, clear the placeholder text
+            if (scanLog.querySelector('p.text-muted')) {
+                scanLog.innerHTML = '';
+            }
+
+            scanLog.prepend(logEntry);
+        }
+
+        manualForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            const uniqueId = manualInput.value.trim();
+            if (uniqueId) {
+                issueItem(uniqueId);
+                manualInput.value = ''; // Clear input after submission
+            }
+        }
+
+        clientSelect.addEventListener('change', () => {
+            if (clientSelect.value) {
+                scannerStatus.textContent = 'Scanner is active. Position a QR code in the frame.';
+                if (!html5QrCode) {
+                    html5QrCode = new Html5Qrcode("scanner-container");
+                    html5QrCode.start(
+                        { facingMode: "environment" }, // Use the rear camera
+                        { fps: 10, qrbox: { width: 250, height: 250 } },
+                        onScanSuccess,
+                        (errorMessage) => { /* handle scan error */ }
+                    ).catch(err => {
+                        scannerStatus.textContent = 'Error starting scanner: ' + err;
+                    });
+                }
+            }
+        });
+    });
+</script>
+
+<%- include('partials/footer') %>

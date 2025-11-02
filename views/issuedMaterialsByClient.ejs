@@ -1,0 +1,45 @@
+<%- include('partials/header') %>
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1><%= title %></h1>
+        <a href="javascript:history.back()" class="btn btn-secondary">
+            <i class="bi bi-arrow-left me-2"></i> Back
+        </a>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <% if (materials.length > 0) { %>
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Description</th>
+                                <th>Unique ID</th>
+                                <th class="text-center">QR Code</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% materials.forEach(material => { %>
+                                <tr>
+                                    <td><%= material.name %></td>
+                                    <td><%= material.description || 'N/A' %></td>
+                                    <td><code><%= material.unique_id %></code></td>
+                                    <td class="text-center">
+                                        <img src="<%= material.qr_code_path %>" alt="QR Code" style="width: 60px; height: 60px;">
+                                    </td>
+                                </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            <% } else { %>
+                <p class="text-center text-muted">No materials are currently issued to this client.</p>
+            <% } %>
+        </div>
+    </div>
+</div>
+
+<%- include('partials/footer') %>

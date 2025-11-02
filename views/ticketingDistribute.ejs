@@ -1,137 +1,197 @@
 <%- include('partials/header') %>
 
-<div class="container-fluid">
-  <%- include('partials/ticketingNav') %>
+<div class="container mt-4">
+    <%- include('partials/ticketingNav') %> 
 
-  <div class="card shadow-sm mb-4 no-print">
-    <div class="card-header py-3 d-flex justify-content-between align-items-center">
-      <h6 class="m-0 fw-bold text-primary">Distribute New Ticket Bundle</h6>
-      <a href="/ticketing/distribute/bulk" class="btn btn-sm btn-info shadow-sm">
-        <i class="bi bi-upload me-1"></i> Bulk Distribute
-      </a>
+    <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+        <h1><%= title %></h1>
     </div>
-    <div class="card-body">
-      <form action="/ticketing/distribute" method="POST">
-        <div class="row g-3 align-items-end">
-        <div class="col-md-2">
-          <label for="distribution_date" class="form-label">Date</label>
-          <input type="date" class="form-control" id="distribution_date" name="distribution_date" value="<%= new Date().toISOString().split('T')[0] %>" required autofocus>
-        </div>
-        <div class="col-md-2">
-          <label for="staff_id" class="form-label">Staff Member</label>
-          <select id="staff_id" name="staff_id" class="form-select" required>
-            <option value="" disabled selected>Select Staff...</option>
-            <% staff.forEach(s => { %>
-              <option value="<%= s.id %>"><%= s.name %></option>
-            <% }) %>
-          </select>
-        </div>
-        <div class="col-md-3">
-          <label for="ride_id" class="form-label">Assign to Ride / Entry</label>
-          <select id="ride_id" name="ride_id" class="form-select" required>
-            <option value="" disabled selected>Select a ride...</option>
-            <% rides.forEach(ride => { %>
-              <option value="<%= ride.id %>" data-rate="<%= ride.rate %>"><%= ride.name %> (₹<%= ride.rate %>)</option>
-            <% }) %>
-          </select>
-        </div>
-        <div class="col-md-3">
-          <label for="stock_id" class="form-label">From Available Stock</label>
-          <select id="stock_id" name="stock_id" class="form-select" required>
-            <option value="" disabled selected>Select a ride first...</option> 
-            <% stock.forEach(s => { %>
-              <option value="<%= s.id %>" data-rate="<%= s.rate %>" class="d-none stock-option">
-                <%= s.color %> bundle (₹<%= s.rate %>) | Nos: <%= s.start_number %> - <%= s.end_number %>
-              </option>
-            <% }) %>
-          </select>
-        </div>
-        <div class="col-md-2">
-          <button type="submit" class="btn btn-primary w-100">Distribute Bundle</button>
-        </div>
-        </div>
-      </form>
-    </div>
-  </div>
 
-  <div class="alert alert-info">
-    <h5 class="alert-heading">Workflow</h5>
-    <p>1. Select a staff member and the ride/entry point they will be working at. <br> 2. The "From Available Stock" dropdown will automatically show ticket bundles that match the ride's rate. <br> 3. Select a bundle and click "Distribute".</p>
-    <p class="mb-0">After the shift, go to the <strong>Settle Sales</strong> page to enter the returned ticket numbers and calculate the revenue.</p>
-  </div>
-</div>
-
-<div class="card shadow-sm mt-4">
-  <div class="card-header py-3">
-    <h6 class="m-0 fw-bold text-primary">Currently Distributed Tickets</h6>
-  </div>
-  <div class="card-body">
-    <div class="table-responsive">
-      <table class="table table-bordered" id="dataTable">
-        <thead>
-          <tr>
-            <th>Staff Member</th>
-            <th>Ride Name</th>
-            <th>Color</th>
-            <th>Serial Range</th>
-            <th>Date Distributed</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% distributedTickets.forEach(d => { %>
-            <tr>
-              <td><%= d.staff_name %></td>
-              <td><%= d.ride_name %></td>
-              <td><span class="badge" style="background-color: <%= d.color ? d.color.toLowerCase() : 'grey' %>;"><%= d.color %></span></td>
-              <td><%= d.start_number %> - <%= d.end_number %></td>
-              <td><%= new Date(d.distribution_date).toLocaleDateString() %></td>
-              <td>
-                <a href="/ticketing/distribute/edit/<%= d.id %>" class="btn btn-sm btn-warning me-1" title="Edit"><i class="bi bi-pencil"></i></a>
-                <form action="/ticketing/distribute/delete/<%= d.id %>" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to recall this ticket bundle?');">
-                  <button type="submit" class="btn btn-sm btn-danger" title="Recall Bundle"><i class="bi bi-arrow-return-left"></i></button>
+    <!-- Filter Form -->
+    <div class="card mb-4 no-print">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <button class="btn btn-link text-decoration-none text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse" aria-expanded="false" aria-controls="filterCollapse">
+                    <i class="bi bi-funnel"></i> Filter Distributions
+                </button>
+            </h5>
+        </div>
+        <div class="collapse" id="filterCollapse">
+            <div class="card-body bg-light">
+                <form action="/ticketing/distribute" method="GET" class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label for="filter-staff" class="form-label">Staff Member</label>
+                        <select id="filter-staff" name="staff_id" class="form-select">
+                            <option value="">All Staff</option>
+                            <% staff.forEach(s => { %>
+                                <option value="<%= s.id %>" <%= filters.staff_id == s.id ? 'selected' : '' %>><%= s.name %></option>
+                            <% }) %>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="filter-ride" class="form-label">Ride</label>
+                        <select id="filter-ride" name="ride_id" class="form-select">
+                            <option value="">All Rides</option>
+                            <% rides.forEach(r => { %>
+                                <option value="<%= r.id %>" <%= filters.ride_id == r.id ? 'selected' : '' %>><%= r.name %></option>
+                            <% }) %>
+                        </select>
+                    </div>
+                    <div class="col-md-2"><label for="start_date" class="form-label">Start Date</label><input type="date" name="start_date" id="start_date" class="form-control" value="<%= filters.start_date || '' %>"></div>
+                    <div class="col-md-2"><label for="end_date" class="form-label">End Date</label><input type="date" name="end_date" id="end_date" class="form-control" value="<%= filters.end_date || '' %>"></div>
+                    <div class="col-md-2"><button type="submit" class="btn btn-primary">Filter</button><a href="/ticketing/distribute" class="btn btn-secondary ms-2">Clear</a></div>
                 </form>
-              </td>
-            </tr>
-          <% }) %>
-        </tbody>
-      </table>
+            </div>
+        </div>
     </div>
-  </div>
+
+    <div class="row">
+        <!-- Distribution Form -->
+        <div class="col-md-4 no-print">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Distribute New Book</h5>
+                </div>
+                <div class="card-body">
+                    <form action="/ticketing/distribute" method="POST">
+                        <div class="mb-3">
+                            <label for="distribution_date" class="form-label">Distribution Date</label>
+                            <input type="date" class="form-control" id="distribution_date" name="distribution_date" value="<%= new Date().toISOString().split('T')[0] %>" required autofocus>
+                        </div>
+                        <div class="mb-3">
+                            <label for="staff_id" class="form-label">Staff Member</label>
+                            <select class="form-select" id="staff_id" name="staff_id" required>
+                                <option value="">-- Select Staff --</option>
+                                <% staff.forEach(s => { %>
+                                    <option value="<%= s.id %>"><%= s.name %></option>
+                                <% }) %>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="ride_id" class="form-label">Ride</label>
+                            <select class="form-select" id="ride_id" name="ride_id" required>
+                                <option value="">-- Select Ride --</option>
+                                <% rides.forEach(r => { %>
+                                    <option value="<%= r.id %>"><%= r.name %> (₹<%= (r.rate || 0).toFixed(2) %>)</option>
+                                <% }) %>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="stock_id" class="form-label">Ticket Stock</label>
+                            <select class="form-select" id="stock_id" name="stock_id" required>
+                                <option value="">-- Select Stock Book --</option>
+                                <% stock.forEach(item => { %>
+                                    <option value="<%= item.id %>">
+                                        <%= item.start_number %> - <%= item.end_number %> (Rate: ₹<%= item.rate.toFixed(2) %>, Color: <%= item.color %>)
+                                    </option>
+                                <% }) %>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Distribute</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Currently Distributed Table -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Currently Distributed Tickets (Unsettled)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Staff</th>
+                                    <th>Ride</th>
+                                    <th class="text-end">Rate (₹)</th>
+                                    <th>Number Range</th>
+                                    <th class="text-end no-print">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% const unsettled = distributions.filter(d => d.status === 'Distributed'); %>
+                                <% if (unsettled.length > 0) { %>
+                                    <% unsettled.forEach(dist => { %>
+                                        <% if (dist.status === 'Distributed') { %>
+                                            <tr>
+                                                <td><%= new Date(dist.distribution_date).toLocaleDateString() %></td>
+                                                <td><%= dist.staff_name %></td>
+                                                <td><%= dist.ride_name %></td>
+                                                <td class="text-end"><%= dist.rate.toFixed(2) %></td>
+                                                <td><%= dist.distributed_start_number %> - <%= dist.distributed_end_number %></td>
+                                                <td class="text-end no-print">
+                                                    <a href="/ticketing/settle/<%= dist.id %>" class="btn btn-sm btn-success">Settle</a>
+                                                    <form action="/ticketing/distribute/cancel/<%= dist.id %>" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to cancel this distribution? The stock will become available again.');">
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger">Cancel</button>
+                                                    </form>
+                                                </td>
+                                            </tr>
+                                        <% } %>
+                                    <% }); %>
+                                <% } else { %>
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted">
+                                            No tickets are currently distributed.
+                                        </td>
+                                    </tr>
+                                <% } %>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recently Settled Table -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5>Recently Settled Tickets</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Settled Date</th>
+                            <th>Staff</th>
+                            <th>Ride</th>
+                            <th>Number Range</th>
+                            <th class="text-end">Tickets Sold</th>
+                            <th class="text-end">Revenue (₹)</th>
+                            <th class="text-end no-print">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% const settled = distributions.filter(d => d.status === 'Settled'); %>
+                        <% if (settled.length > 0) { %>
+                            <% settled.forEach(dist => { %>
+                                <tr>
+                                    <td><%= new Date(dist.settlement_date).toLocaleDateString() %></td>
+                                    <td><%= dist.staff_name %></td>
+                                    <td><%= dist.ride_name %></td>
+                                    <td><%= dist.distributed_start_number %> - <%= dist.distributed_end_number %></td>
+                                    <td class="text-end"><%= dist.tickets_sold %></td>
+                                    <td class="text-end fw-bold"><%= dist.calculated_revenue.toFixed(2) %></td>
+                                    <td class="text-end no-print">
+                                        <form action="/ticketing/settle/revert/<%= dist.id %>" method="POST" class="d-inline" onsubmit="return confirm('WARNING: This will reverse the settlement and delete associated financial records. Are you absolutely sure?');">
+                                            <button type="submit" class="btn btn-sm btn-warning">Revert</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            <% }) %>
+                        <% } else { %>
+                            <tr><td colspan="7" class="text-center text-muted">No recent settlements.</td></tr>
+                        <% } %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>
-
-<script>
-  document.addEventListener('DOMContentLoaded', function() {
-    const rideSelect = document.getElementById('ride_id');
-    const stockSelect = document.getElementById('stock_id');
-    const stockOptions = document.querySelectorAll('.stock-option');
-
-    rideSelect.addEventListener('change', function() {
-      const selectedRideOption = this.options[this.selectedIndex];
-      const selectedRate = selectedRideOption.getAttribute('data-rate');
-      
-      // Reset stock dropdown
-      stockSelect.value = '';
-      let hasMatchingStock = false;
-
-      // Hide all options first
-      stockOptions.forEach(option => {
-        option.classList.add('d-none');
-      });
-
-      // Show only matching options
-      stockOptions.forEach(option => {
-        if (option.getAttribute('data-rate') === selectedRate) {
-          option.classList.remove('d-none');
-          hasMatchingStock = true;
-        }
-      });
-
-      // Update placeholder text
-      const placeholder = stockSelect.querySelector('option[disabled]');
-      placeholder.textContent = hasMatchingStock ? 'Select a stock bundle...' : 'No available stock for this rate';
-    });
-  });
-</script>
 
 <%- include('partials/footer') %>

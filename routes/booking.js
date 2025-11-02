@@ -275,6 +275,9 @@ router.get('/details-full/:id', async (req, res) => {
       shed: { charged: shedCharged, paid: shedPaid, due: shedCharged - shedPaid }
     };
 
+    // Fetch count of issued materials for the link
+    const issuedMaterialCount = (await get('SELECT COUNT(id) as count FROM material_stock WHERE issued_to_client_id = ? AND status = ?', [booking.client_id, 'Issued']))?.count || 0;
+
     res.render('bookingDetailsFull', {
       title: `Details for Booking #${booking.id}`,
       booking,
@@ -282,7 +285,8 @@ router.get('/details-full/:id', async (req, res) => {
       electricBills,
       shedAllocations,
       previousId,
-      nextId
+      nextId,
+      issuedMaterialCount
     });
 
   } catch (err) {

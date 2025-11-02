@@ -1,0 +1,83 @@
+<%- include('partials/header') %>
+
+<div class="container mt-4">
+    <%- include('partials/ticketingNav') %>
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1><%= title %></h1>
+    </div>
+
+    <!-- Filter Form -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form action="/ticketing/report/staff-settlements" method="GET">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label for="q" class="form-label">Search by Staff Name</label>
+                        <input type="text" class="form-control" id="q" name="q" value="<%= filters.q %>">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="status" class="form-label">Status</label>
+                        <select id="status" name="status" class="form-select">
+                            <option value="all" <%= filters.status === 'all' ? 'selected' : '' %>>All</option>
+                            <option value="unsettled" <%= filters.status === 'unsettled' ? 'selected' : '' %>>Unsettled</option>
+                            <option value="settled" <%= filters.status === 'settled' ? 'selected' : '' %>>Settled</option>
+                        </select>
+                    </div>
+                    <div class="col-md-auto">
+                        <button type="submit" class="btn btn-primary">Filter</button>
+                        <a href="/ticketing/report/staff-settlements" class="btn btn-secondary">Clear</a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Report Table -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Staff Name</th>
+                            <th class="text-end">Expected (₹)</th>
+                            <th class="text-end">Collected (₹)</th>
+                            <th class="text-end">Difference (₹)</th>
+                            <th>Notes</th>
+                            <th>Status</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% if (settlements.length > 0) { %>
+                            <% settlements.forEach(s => { %>
+                                <tr>
+                                    <td><%= new Date(s.settlement_date).toLocaleDateString() %></td>
+                                    <td><%= s.staff_name %></td>
+                                    <td class="text-end"><%= s.expected_amount.toFixed(2) %></td>
+                                    <td class="text-end"><%= s.actual_amount.toFixed(2) %></td>
+                                    <td class="text-end fw-bold <%= s.difference < 0 ? 'text-danger' : 'text-success' %>"><%= s.difference.toFixed(2) %></td>
+                                    <td><%= s.notes || '---' %></td>
+                                    <td><span class="badge bg-<%= s.status === 'unsettled' ? 'warning' : 'success' %>"><%= s.status %></span></td>
+                                    <td class="text-end">
+                                        <% if (s.status === 'unsettled') { %>
+                                            <form action="/ticketing/report/staff-settlements/clear/<%= s.id %>" method="POST" onsubmit="return confirm('Are you sure you want to mark this as cleared?');">
+                                                <button type="submit" class="btn btn-sm btn-success">Clear</button>
+                                            </form>
+                                        <% } %>
+                                    </td>
+                                </tr>
+                            <% }) %>
+                        <% } else { %>
+                            <tr><td colspan="8" class="text-center text-muted">No settlement records found.</td></tr>
+                        <% } %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include('partials/footer') %>

@@ -39,13 +39,14 @@ const spaceRoutes = require('./routes/space');
 const bookingRoutes = require('./routes/booking');
 const electricRoutes = require('./routes/electric');
 const materialRoutes = require('./routes/material');
+const materialsRoutes = require('./routes/materials'); // For material stock management
 const settingsRoutes = require('./routes/settings'); // Ensure this line exists
 const chargesRoutes = require('./routes/charges');
+const electricItemsRoutes = require('./routes/electric-items');
 const shedRoutes = require('./routes/shed');
 const reportRoutes = require('./routes/report');
 const staffRoutes = require('./routes/staff');
 const userRoutes = require('./routes/users');
-const authRoutes = require('./routes/auth');
 const accountingRoutes = require('./routes/accounting');
 const notificationRoutes = require('./routes/notification');
 const sessionHandler = require('./sessionHandler');
@@ -85,16 +86,18 @@ app.use('/space', isAuthenticated, hasRole(['booking_manager']), spaceRoutes);
 app.use('/booking', isAuthenticated, hasRole(['booking_manager']), bookingRoutes);
 app.use('/electric', isAuthenticated, hasRole(['booking_manager']), electricRoutes);
 app.use('/material', isAuthenticated, hasRole(['booking_manager']), materialRoutes);
+app.use('/materials', isAuthenticated, isAdmin, materialsRoutes); // Admin-only
 app.use('/charges', isAuthenticated, hasRole(['accountant']), chargesRoutes);
 app.use('/shed', isAuthenticated, hasRole(['booking_manager']), shedRoutes);
 app.use('/staff', isAuthenticated, isAdmin, staffRoutes);
-app.use('/ticketing', isAuthenticated, hasRole(['ticketing_manager']), ticketingRoutes);
+app.use('/ticketing', isAuthenticated, hasRole(['ticketing_manager', 'admin']), ticketingRoutes);
 app.use('/accounting', isAuthenticated, hasRole(['accountant']), accountingRoutes);
 
 app.use('/report', isAuthenticated, isAdmin, reportRoutes); // Reports for admins only for now
 app.use('/users', isAuthenticated, isAdmin, userRoutes);
 app.use('/sessions', isAuthenticated, isAdmin, sessionRoutes);
 app.use('/settings', isAuthenticated, isAdmin, settingsRoutes);
+app.use('/electric-items', isAuthenticated, isAdmin, electricItemsRoutes);
 app.use('/notification', isAuthenticated, notificationRoutes);
 
 // Dashboard route
@@ -175,13 +178,15 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
       electricStats,
       materialStats,
       shedStats,
-      contextualData // This will be pendingApprovals for admins, or userNotifications for users
+      contextualData, // This will be pendingApprovals for admins, or userNotifications for users
+      recentActivities
     ] = await Promise.all([
       all(categoryQuery),
       get(totalQuery),
       bookedSpacesQuery,
       all(spacesQuery, [viewingSessionId]),
-      ...financialQueries
+      ...financialQueries,
+      all('SELECT timestamp, username, action, details FROM logs WHERE event_session_id = ? ORDER BY timestamp DESC LIMIT 10', [viewingSessionId])
     ]);
 
     const categoryCounts = (categories || []).reduce((acc, row) => {
@@ -242,6 +247,7 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
       financials,
       pendingApprovals: (req.session.user && req.session.user.role === 'admin') ? (contextualData || []) : [],
       userNotifications: (req.session.user && req.session.user.role !== 'admin') ? (contextualData || []) : [],
+      recentActivities,
       showBackupAlert,
       message: req.query.message
     });

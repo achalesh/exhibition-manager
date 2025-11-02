@@ -676,4 +676,141 @@ router.get('/sales-by-staff/:id', async (req, res) => {
   }
 });
 
+// GET /report/materials - Show a report of all items in material stock
+router.get('/materials', async (req, res) => {
+  try {
+    const viewingSessionId = res.locals.viewingSession.id;
+    const { status = 'all', q } = req.query;
+
+    let sql = `
+      SELECT 
+        ms.id,
+        ms.name,
+        ms.description,
+        ms.status,
+        ms.unique_id,
+        c.name as issued_to_client,
+        s.name as space_name,
+        b.contact_number
+      FROM material_stock ms
+      LEFT JOIN clients c ON ms.issued_to_client_id = c.id
+      LEFT JOIN (
+        SELECT client_id, space_id, contact_number 
+        FROM bookings 
+        WHERE event_session_id = ? AND booking_status = 'active'
+      ) b ON c.id = b.client_id
+      LEFT JOIN spaces s ON b.space_id = s.id
+    `;
+
+    const whereClauses = [];
+    const params = [viewingSessionId];
+
+    if (status && status !== 'all') {
+      whereClauses.push('ms.status = ?');
+      params.push(status);
+    }
+
+    if (q) {
+      whereClauses.push('(ms.name LIKE ? OR ms.unique_id LIKE ? OR c.name LIKE ? OR s.name LIKE ?)');
+      params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+    }
+
+    if (whereClauses.length > 0) {
+      sql += ` WHERE ${whereClauses.join(' AND ')}`;
+    }
+
+    sql += ' ORDER BY ms.name, ms.id';
+
+    const materials = await all(sql, params);
+
+    res.render('reportMaterials', {
+      title: 'Material Stock Report',
+      materials,
+      filters: { status, q: q || '' }
+    });
+
+  } catch (err) {
+    console.error('Error generating material stock report:', err);
+    res.status(500).send('Error generating report.');
+  }
+});
+
+// GET /report/materials/csv - Download material stock as CSV
+router.get('/materials/csv', async (req, res) => {
+  try {
+    const viewingSessionId = res.locals.viewingSession.id;
+    // This query can be simpler for CSV as it doesn't need filtering from the UI in the same way
+    const materials = await all(`
+      SELECT 
+        ms.name, 
+        ms.description, 
+        ms.status, 
+        ms.unique_id, 
+        c.name as issued_to_client,
+        s.name as space_name
+      FROM material_stock ms
+      LEFT JOIN clients c ON ms.issued_to_client_id = c.id
+      LEFT JOIN (SELECT client_id, space_id FROM bookings WHERE event_session_id = ? AND booking_status = 'active') b ON c.id = b.client_id LEFT JOIN spaces s ON b.space_id = s.id
+      ORDER BY ms.name, ms.id
+    `, [viewingSessionId]);
+
+    const json2csvParser = new Parser();
+    const csv = json2csvParser.parse(materials);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="material-stock-report.csv"');
+    res.status(200).send(csv);
+  } catch (err) {
+    console.error('Error generating material stock CSV:', err);
+    res.status(500).send('Error generating CSV.');
+  }
+});
+
+// GET /report/material-issues - Show a report of all material issues (form-based)
+router.get('/material-issues', async (req, res) => {
+  try {
+    const viewingSessionId = res.locals.viewingSession.id;
+    const { q } = req.query;
+
+    let sql = `
+      SELECT 
+        mi.id,
+        mi.sl_no,
+        mi.issue_date,
+        c.name as client_name,
+        b.facia_name,
+        s.name as space_name,
+        mi.total_payable,
+        mi.advance_paid,
+        mi.balance_due
+      FROM material_issues mi
+      JOIN clients c ON mi.client_id = c.id
+      LEFT JOIN bookings b ON c.id = b.client_id AND b.event_session_id = mi.event_session_id AND b.booking_status = 'active'
+      LEFT JOIN spaces s ON b.space_id = s.id
+    `;
+
+    const whereClauses = ['mi.event_session_id = ?'];
+    const params = [viewingSessionId];
+
+    if (q) {
+      whereClauses.push('(c.name LIKE ? OR b.facia_name LIKE ? OR s.name LIKE ? OR mi.sl_no LIKE ?)');
+      params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+    }
+
+    sql += ` WHERE ${whereClauses.join(' AND ')} ORDER BY mi.issue_date DESC, mi.id DESC`;
+
+    const issues = await all(sql, params);
+
+    res.render('reportMaterialIssues', {
+      title: 'Material Issues Report (Form-based)',
+      issues,
+      filters: { q: q || '' }
+    });
+
+  } catch (err) {
+    console.error('Error generating material issues report:', err);
+    res.status(500).send('Error generating report.');
+  }
+});
+
 module.exports = router;
