@@ -117,11 +117,11 @@
                                 <% if (unsettled.length > 0) { %>
                                     <% unsettled.forEach(dist => { %>
                                         <% if (dist.status === 'Distributed') { %>
-                                            <tr>
+                                            <tr> 
                                                 <td><%= new Date(dist.distribution_date).toLocaleDateString() %></td>
                                                 <td><%= dist.staff_name %></td>
                                                 <td><%= dist.ride_name %></td>
-                                                <td class="text-end"><%= dist.rate.toFixed(2) %></td>
+                                                <td class="text-end"><%= (dist.rate || 0).toFixed(2) %></td>
                                                 <td><%= dist.distributed_start_number %> - <%= dist.distributed_end_number %></td>
                                                 <td class="text-end no-print">
                                                     <a href="/ticketing/settle/<%= dist.id %>" class="btn btn-sm btn-success">Settle</a>
