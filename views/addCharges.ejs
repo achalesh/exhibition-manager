@@ -62,8 +62,18 @@
 
         <!-- Last Payment Details -->
         <div class="col-lg-5">
+            <!-- Due Details Card (now on top) -->
+            <div class="card shadow-sm mb-3" id="due-details-card" style="display: none;">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-hourglass-split me-2"></i>Outstanding Dues</h5>
+                </div>
+                <div class="card-body" id="due-details-body">
+                    <!-- Dues will be populated here by JavaScript -->
+                </div>
+            </div>
+
             <% if (lastPaymentDetails) { %>
-                <div class="card border-success shadow-sm">
+                <div class="card border-success shadow-sm" id="last-payment-card">
                     <div class="card-header bg-success text-white">
                         <h5 class="mb-0"><i class="bi bi-check-circle-fill me-2"></i>Payment Recorded</h5>
                     </div>
@@ -71,35 +81,18 @@
                         <p><strong>Exhibitor:</strong> <%= lastPaymentDetails.exhibitor_name %></p>
                         <p><strong>Receipt No:</strong> <%= lastPaymentDetails.receipt_number %></p>
                         <p><strong>Date:</strong> <%= new Date(lastPaymentDetails.payment_date).toLocaleDateString() %></p>
-                        <% 
-                            let type = 'Unknown';
-                            let amount = 0;
-                            if (lastPaymentDetails.rent_paid > 0) { type = 'Rent'; amount = lastPaymentDetails.rent_paid; }
-                            else if (lastPaymentDetails.electric_paid > 0) { type = 'Electric'; amount = lastPaymentDetails.electric_paid; }
-                            else if (lastPaymentDetails.material_paid > 0) { type = 'Material'; amount = lastPaymentDetails.material_paid; }
-                            else if (lastPaymentDetails.shed_paid > 0) { type = 'Shed'; amount = lastPaymentDetails.shed_paid; }
-                        %>
-                        <p><strong>For:</strong> <%= type %></p>
-                        <p class="fs-4 fw-bold">Total Paid: ₹<%= (amount).toFixed(2) %></p>
+                        <p><strong>For:</strong> <%= lastPaymentDetails.payment_category %></p>
+                        <p class="fs-4 fw-bold">Total Paid: ₹<%= (lastPaymentDetails.total_paid).toFixed(2) %></p>
                         <a href="/charges/receipt/<%= lastPaymentDetails.id %>" class="btn btn-outline-primary w-100" target="_blank">
                             <i class="bi bi-printer me-2"></i>Print Receipt
                         </a>
                     </div>
                 </div>
-            <% } else { %>
-                <!-- Due Details Card -->
-                <div class="card shadow-sm" id="due-details-card" style="display: none;">
-                    <div class="card-header">
-                        <h5 class="mb-0"><i class="bi bi-hourglass-split me-2"></i>Outstanding Dues</h5>
-                    </div>
-                    <div class="card-body" id="due-details-body">
-                        <!-- Dues will be populated here by JavaScript -->
-                    </div>
-                </div>
-                <div class="alert alert-info" id="due-details-placeholder">
-                    Select an exhibitor to view their due amounts.
-                </div>
             <% } %>
+
+            <div class="alert alert-info" id="due-details-placeholder" style="<%= lastPaymentDetails ? 'display: none;' : 'display: block;' %>">
+                Select an exhibitor to view their due amounts.
+            </div>
         </div>
     </div>
 </div>

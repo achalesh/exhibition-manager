@@ -11,7 +11,17 @@ router.get('/add', async (req, res) => {
     // Fetch details of the last payment if an ID is provided
     if (last_payment_id) {
       lastPaymentDetails = await get(`
-        SELECT p.*, b.exhibitor_name 
+        SELECT 
+          p.*, 
+          b.exhibitor_name,
+          (p.cash_paid + p.upi_paid) as total_paid,
+          CASE
+            WHEN p.rent_paid > 0 THEN 'Rent'
+            WHEN p.electric_paid > 0 THEN 'Electric'
+            WHEN p.material_paid > 0 THEN 'Material'
+            WHEN p.shed_paid > 0 THEN 'Shed'
+            ELSE 'Unknown'
+          END as payment_category
         FROM payments p 
         JOIN bookings b ON p.booking_id = b.id 
         WHERE p.id = ?
@@ -361,10 +371,35 @@ router.get('/receipt/:id', async (req, res) => {
       return res.status(404).send('Payment receipt not found.');
     }
 
+    // --- Financial Summary Calculation ---
+    // 1. Get all charges for the booking
+    const bookingDetails = await get('SELECT client_id, rent_amount, discount FROM bookings WHERE id = ?', [payment.booking_id]);
+    const rentCharged = (bookingDetails.rent_amount || 0) - (bookingDetails.discount || 0);
+    const electricCharged = (await get('SELECT SUM(total_amount) as total FROM electric_bills WHERE booking_id = ?', [payment.booking_id]))?.total || 0;
+    const materialCharged = (await get('SELECT SUM(total_payable) as total FROM material_issues WHERE client_id = ?', [bookingDetails.client_id]))?.total || 0;
+    const shedRentFromAllocation = (await get('SELECT SUM(s.rent) as total FROM shed_allocations sa JOIN sheds s ON sa.shed_id = s.id WHERE sa.booking_id = ?', [payment.booking_id]))?.total || 0;
+    const totalCharged = rentCharged + electricCharged + materialCharged + shedRentFromAllocation;
+
+    // 2. Get all payments for the booking
+    const allPayments = await all('SELECT rent_paid, electric_paid, material_paid, shed_paid FROM payments WHERE booking_id = ?', [payment.booking_id]);
+    const totalPaid = allPayments.reduce((sum, p) => sum + p.rent_paid + p.electric_paid + p.material_paid + p.shed_paid, 0);
+    
+    // 3. Calculate the balance
+    const thisPaymentAmount = payment.rent_paid + payment.electric_paid + payment.material_paid + payment.shed_paid;
+    const balanceDue = totalCharged - totalPaid;
+    const previousBalance = balanceDue + thisPaymentAmount;
+
+    const financialSummary = {
+      previous_balance: previousBalance,
+      amount_paid: thisPaymentAmount,
+      balance_due: balanceDue
+    };
+
     res.render('paymentReceipt', {
       title: `Receipt #${payment.receipt_number || payment.id}`,
       payment,
-      viewingSession: res.locals.viewingSession // Pass session data to the view
+      financialSummary,
+      viewingSession: res.locals.viewingSession
     });
   } catch (err) {
     console.error('Error generating payment receipt:', err);

@@ -121,14 +121,22 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td>Payment towards <%= paymentFor %></td>
-                        <td class="text-end"><%= amount.toFixed(2) %></td>
-                    </tr>
+                    <% if (payment.cash_paid > 0) { %>
+                        <tr>
+                            <td>Cash Paid</td>
+                            <td class="text-end"><%= payment.cash_paid.toFixed(2) %></td>
+                        </tr>
+                    <% } %>
+                    <% if (payment.upi_paid > 0) { %>
+                        <tr>
+                            <td>UPI/Digital Paid</td>
+                            <td class="text-end"><%= payment.upi_paid.toFixed(2) %></td>
+                        </tr>
+                    <% } %>
                 </tbody>
                 <tfoot>
                     <tr>
-                        <td class="text-end"><strong>Total</strong></td>
+                        <td class="text-end"><strong>Total Paid</strong></td>
                         <td class="text-end"><strong>₹<%= amount.toFixed(2) %></strong></td>
                     </tr>
                 </tfoot>
