@@ -5,23 +5,40 @@ const { all, get, run, transaction } = require('../db-helpers'); // Assuming tra
 // GET: Show the form to add various charges
 router.get('/add', async (req, res) => {
   try {
-    // Fetch all bookings to populate the exhibitor dropdown
-    const bookings = await all(`
-      SELECT b.id, b.exhibitor_name, b.facia_name, s.name as space_name 
-      FROM bookings b
-      JOIN spaces s ON b.space_id = s.id
-      ORDER BY b.exhibitor_name
-    `);
+    const { last_payment_id } = req.query;
+    let lastPaymentDetails = null;
 
-    // Fetch the last receipt number to suggest the next one.
-    // This assumes receipt numbers are numeric. It casts them to an integer for correct sorting.
-    const lastReceipt = await get(`SELECT MAX(CAST(receipt_number AS INTEGER)) as max_receipt FROM payments`);
+    // Fetch details of the last payment if an ID is provided
+    if (last_payment_id) {
+      lastPaymentDetails = await get(`
+        SELECT p.*, b.exhibitor_name 
+        FROM payments p 
+        JOIN bookings b ON p.booking_id = b.id 
+        WHERE p.id = ?
+      `, [last_payment_id]);
+    }
+
+    // Fetch bookings and next receipt number in parallel
+    const [bookings, lastReceipt] = await Promise.all([
+      all(`
+        SELECT b.id, b.exhibitor_name, b.facia_name, s.name as space_name 
+        FROM bookings b
+        JOIN spaces s ON b.space_id = s.id
+        WHERE b.event_session_id = ? AND b.booking_status = 'active'
+        ORDER BY b.exhibitor_name
+      `, [res.locals.viewingSession.id]),
+      get(`SELECT MAX(CAST(receipt_number AS INTEGER)) as max_receipt FROM payments WHERE event_session_id = ?`, [res.locals.viewingSession.id])
+    ]);
+
     const nextReceiptNumber = (lastReceipt?.max_receipt || 0) + 1;
 
     res.render('addCharges', { 
       title: 'Receive Payment', 
-      bookings, lastPaymentId: req.query.last_payment_id || null,
-      nextReceiptNumber });
+      bookings, 
+      lastPaymentDetails,
+      nextReceiptNumber,
+      selectedBookingId: req.query.booking_id
+    });
   } catch (err) {
     console.error('Error loading add charges page:', err.message);
     res.status(500).send('Error loading page.');
@@ -90,7 +107,8 @@ router.post('/add', async (req, res) => {
   const payment_mode = cashAmount > 0 && upiAmount > 0 ? 'Cash & UPI' : (cashAmount > 0 ? 'Cash' : 'UPI');
 
   if (totalPaid <= 0) {
-    return res.status(400).send('Payment amount must be greater than zero.');
+    req.session.flash = { type: 'danger', message: 'Payment amount must be greater than zero.' };
+    return res.redirect(`/charges/add?booking_id=${booking_id}`);
   }
 
   const paymentCols = { rent: 'rent_paid', electric: 'electric_paid', material: 'material_paid', shed: 'shed_paid' };
