@@ -1,0 +1,9 @@
+# SQLite database
+*.db
+*.db-journal
+
+# Node.js dependencies
+node_modules/
+
+# Environment variables
+.env

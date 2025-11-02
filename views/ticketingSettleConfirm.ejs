@@ -1,0 +1,122 @@
+<%- include('partials/header') %>
+
+<%- include('partials/ticketingSubNav') %>
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0"><%= title %></h4>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <p><strong>Staff Member:</strong> <%= distribution.staff_name %></p>
+                            <p><strong>Ride/Type:</strong> <%= distribution.rate_name %> (₹<%= distribution.rate %>)</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Ticket Book:</strong> <%= distribution.color %></p>
+                            <p><strong>Book Range:</strong> <%= distribution.distributed_start_number %> - <%= distribution.distributed_end_number %></p>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <h5 class="text-center mb-3">Settlement Summary</h5>
+
+                    <table class="table table-bordered text-center">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Closing Number</th>
+                                <th>Tickets Sold</th>
+                                <th>Total Revenue</th>
+                                <th>Shortage</th>
+                                <th>Excess</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="fs-5"><%= returned_start_number %></td>
+                                <td class="fs-5"><%= tickets_sold %></td>
+                                <td class="fs-5 fw-bold text-success">₹<%= total_revenue.toFixed(2) %></td>
+                                <td class="fs-5 fw-bold text-danger" id="shortage-display">₹0.00</td>
+                                <td class="fs-5 fw-bold text-success" id="excess-display">₹0.00</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <% if (tickets_sold < 0) { %>
+                        <div class="alert alert-danger">
+                            <strong>Error:</strong> The closing number cannot be less than the starting number (<%= distribution.distributed_start_number %>). Please go back and correct it.
+                        </div>
+                    <% } else { %>
+                        <form action="/ticketing/settle/<%= distribution.id %>" method="POST">
+                            <input type="hidden" name="returned_start_number" value="<%= returned_start_number %>">
+
+                            <div class="row justify-content-center g-3">
+                                <div class="col-md-5">
+                                    <div class="mb-3">
+                                        <label for="actual_upi_collected" class="form-label">Actual UPI Collected</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text">₹</span>
+                                            <input type="number" class="form-control" id="actual_upi_collected" name="actual_upi_collected" value="0" step="0.01" min="0" required autofocus>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-5">
+                                    <div class="mb-3">
+                                        <label for="actual_cash_collected" class="form-label">Actual Cash Collected</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text">₹</span>
+                                            <input type="number" class="form-control" id="actual_cash_collected" name="actual_cash_collected" value="0" step="0.01" min="0" required>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-center gap-3 mt-3">
+                                <a href="/ticketing/settle" class="btn btn-secondary px-4"><i class="bi bi-x-circle me-1"></i>Cancel</a>
+                                <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check-circle me-1"></i>Confirm Settlement</button>
+                            </div>
+                        </form>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include('partials/footer') %>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const upiInput = document.getElementById('actual_upi_collected');
+        const cashInput = document.getElementById('actual_cash_collected');
+        const shortageDisplay = document.getElementById('shortage-display');
+        const excessDisplay = document.getElementById('excess-display');
+        const calculatedRevenue = parseFloat('<%= total_revenue %>');
+
+        function calculateDifference() {
+            const upiAmount = parseFloat(upiInput.value) || 0;
+            const cashAmount = parseFloat(cashInput.value) || 0;
+            const totalCollected = upiAmount + cashAmount;
+            const difference = totalCollected - calculatedRevenue;
+
+            if (difference < 0) {
+                shortageDisplay.textContent = `₹${Math.abs(difference).toFixed(2)}`;
+                excessDisplay.textContent = '₹0.00';
+            } else if (difference > 0) {
+                shortageDisplay.textContent = '₹0.00';
+                excessDisplay.textContent = `₹${difference.toFixed(2)}`;
+            } else {
+                shortageDisplay.textContent = '₹0.00';
+                excessDisplay.textContent = '₹0.00';
+            }
+        }
+
+        upiInput.addEventListener('input', calculateDifference);
+        cashInput.addEventListener('input', calculateDifference);
+        calculateDifference(); // Initial calculation on page load
+    });
+</script>

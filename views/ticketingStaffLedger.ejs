@@ -1,0 +1,69 @@
+<%- include('partials/header') %>
+
+<%- include('partials/ticketingSubNav') %>
+
+<div class="container-fluid mt-4">
+  <div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <div>
+        <h4 class="mb-0"><%= title %></h4>
+        <a href="/ticketing/report/staff-accounts" class="text-muted small"><i class="bi bi-arrow-left"></i> Back to Balances</a>
+      </div>
+      <button class="btn btn-sm btn-outline-secondary" onclick="window.print();"><i class="bi bi-printer me-1"></i> Print Report</button>
+    </div>
+    <div class="card-body">
+
+      <div class="alert <%= finalBalance < 0 ? 'alert-danger' : (finalBalance > 0 ? 'alert-success' : 'alert-secondary') %>">
+        <h5 class="alert-heading">Final Balance</h5>
+        <p class="fs-4 fw-bold mb-0">
+          <%= finalBalance < 0 ? 'Shortage of' : (finalBalance > 0 ? 'Excess of' : 'Settled') %>
+          ₹<%= Math.abs(finalBalance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %>
+        </p>
+      </div>
+
+      <!-- Ledger Table -->
+      <div class="table-responsive">
+        <table class="table table-striped table-bordered table-sm">
+          <thead class="table-dark">
+            <tr>
+              <th style="width: 12%;">Date</th>
+              <th>Description</th>
+              <th class="text-end" style="width: 12%;">Debit (Shortage)</th>
+              <th class="text-end" style="width: 12%;">Credit (Excess)</th>
+              <th class="text-end" style="width: 12%;">Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (ledgerEntries && ledgerEntries.length > 0) { %>
+              <% ledgerEntries.forEach(entry => { %>
+                <tr>
+                  <td><%= new Date(entry.date).toLocaleDateString('en-IN') %></td>
+                  <td><%= entry.description %></td>
+                  <td class="text-end text-danger">
+                    <% if (entry.debit > 0) { %>
+                      <%= entry.debit.toFixed(2) %>
+                    <% } %>
+                  </td>
+                  <td class="text-end text-success">
+                    <% if (entry.credit > 0) { %>
+                      <%= entry.credit.toFixed(2) %>
+                    <% } %>
+                  </td>
+                  <td class="text-end fw-bold <%= entry.balance < 0 ? 'text-danger' : (entry.balance > 0 ? 'text-success' : '') %>">
+                    <%= entry.balance.toFixed(2) %>
+                  </td>
+                </tr>
+              <% }); %>
+            <% } else { %>
+              <tr>
+                <td colspan="5" class="text-center">No transactions found for this staff member in this session.</td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

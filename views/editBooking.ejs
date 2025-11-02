@@ -1,0 +1,96 @@
+<%- include('partials/header') %>
+
+<div class="container mt-4">
+  <div class="card">
+    <div class="card-header">
+      <h2><%= title %></h2>
+    </div>
+    <div class="card-body">
+      <form action="/booking/edit/<%= booking.id %>" method="POST">
+        <h5 class="mb-3">Exhibitor Details</h5>
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Name of the Exhibitor</label>
+            <input type="text" class="form-control" name="exhibitor_name" value="<%= booking.exhibitor_name %>" required>
+          </div>
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Name of the Facia</label>
+            <input type="text" class="form-control" name="facia_name" value="<%= booking.facia_name %>">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Product Category</label>
+          <input type="text" class="form-control" name="product_category" value="<%= booking.product_category %>">
+        </div>
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Contact Person</label>
+            <input type="text" class="form-control" name="contact_person" value="<%= booking.contact_person %>" required>
+          </div>
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Contact Number</label>
+            <input type="tel" class="form-control" name="contact_number" value="<%= booking.contact_number %>" required>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Secondary Number</label>
+            <input type="tel" class="form-control" name="secondary_number" value="<%= booking.secondary_number %>">
+          </div>
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Aadhaar/PAN No.</label>
+            <input type="text" class="form-control" name="id_proof" value="<%= booking.id_proof %>">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Full Address</label>
+          <textarea class="form-control" name="full_address" rows="3"><%= booking.full_address %></textarea>
+        </div>
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" value="1" id="form_submitted" name="form_submitted" <%= booking.form_submitted ? 'checked' : '' %>>
+          <label class="form-check-label" for="form_submitted">
+            Signed Application Form Submitted
+          </label>
+        </div>
+
+        <% if (user && user.role === 'admin') { %>
+          <hr>
+          <h5 class="mb-3">Payment Details (Admin Only)</h5>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Rent Amount (₹)</label>
+              <input type="number" class="form-control" name="rent_amount" value="<%= booking.rent_amount %>" required>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Discount (₹)</label>
+              <input type="number" class="form-control" name="discount" value="<%= booking.discount %>" min="0">
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Advance (₹)</label>
+              <input type="number" class="form-control" name="advance_amount" value="<%= booking.advance_amount %>" min="0">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Due Amount (₹)</label>
+              <input type="number" class="form-control" name="due_amount" value="<%= booking.due_amount %>">
+            </div>
+          </div>
+        <% } else { %>
+          <!-- Hidden fields for non-admins to prevent data loss on submission -->
+          <input type="hidden" name="rent_amount" value="<%= booking.rent_amount %>">
+          <input type="hidden" name="discount" value="<%= booking.discount %>">
+          <input type="hidden" name="advance_amount" value="<%= booking.advance_amount %>">
+          <input type="hidden" name="due_amount" value="<%= booking.due_amount %>">
+        <% } %>
+
+        <div class="mt-3">
+          <button type="submit" class="btn btn-primary">Update Booking</button>
+          <a href="/booking/list" class="btn btn-secondary">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

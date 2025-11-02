@@ -1,0 +1,85 @@
+<%- include('partials/header') %>
+
+<div class="container-fluid">
+  <h1 class="h3 mb-4 text-gray-800"><%= title %></h1>
+
+  <!-- Create New User Form -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-3">
+      <h6 class="m-0 fw-bold text-primary">Create New User</h6>
+    </div>
+    <div class="card-body">
+      <form action="/users/add" method="POST" class="row g-3 align-items-end">
+        <div class="col-md-4">
+          <label for="username" class="form-label">Username</label>
+          <input type="text" class="form-control" id="username" name="username" required>
+        </div>
+        <div class="col-md-4">
+          <label for="password" class="form-label">Password</label>
+          <input type="password" class="form-control" id="password" name="password" required>
+        </div>
+        <div class="col-md-2">
+          <label for="role" class="form-label">Role</label>
+          <select id="role" name="role" class="form-select" required>
+            <% roles.forEach(role => { %>
+              <option value="<%= role %>"><%= role.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-primary w-100">Create User</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Existing Users List -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-3">
+      <h6 class="m-0 fw-bold text-primary">Existing Users</h6>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-bordered" id="dataTable">
+          <thead class="table-light">
+            <tr>
+              <th>Username</th>
+              <th>Current Role</th>
+              <th style="width: 30%;">Change Role</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% users.forEach(u => { %>
+              <tr>
+                <td>
+                  <strong><%= u.username %></strong>
+                  <% if (u.id === user.id) { %>
+                    <span class="badge bg-info ms-2">You</span>
+                  <% } %>
+                </td>
+                <td>
+                  <span class="badge bg-secondary"><%= u.role.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) %></span>
+                </td>
+                <td>
+                  <form action="/users/update-role/<%= u.id %>" method="POST" class="d-flex">
+                    <select name="role" class="form-select form-select-sm me-2">
+                      <% roles.forEach(role => { %>
+                        <option value="<%= role %>" <%= u.role === role ? 'selected' : '' %>>
+                          <%= role.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) %>
+                        </option>
+                      <% }) %>
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-success" <%= u.id === user.id && u.role === 'admin' ? 'disabled' : '' %>>Update</button>
+                  </form>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<%- include('partials/footer') %>

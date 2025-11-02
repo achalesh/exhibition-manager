@@ -1,0 +1,96 @@
+<%- include('partials/header') %>
+
+<div class="container-fluid">
+  <h1 class="h3 mb-4 text-gray-800"><%= title %></h1>
+
+  <!-- Filter Form -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-3">
+      <h6 class="m-0 fw-bold text-primary">Filter Logs for: <%= viewingSession.name %></h6>
+    </div>
+    <div class="card-body">
+      <form action="/report/audit-log" method="GET" class="row g-3 align-items-end">
+        <div class="col-md-8">
+          <label for="q" class="form-label">Search by User, Action, or Details</label>
+          <input type="text" id="q" name="q" class="form-control" value="<%= filters.q %>" placeholder="e.g., admin, booking created, #123">
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-primary w-100">Search</button>
+        </div>
+        <div class="col-md-2">
+          <a href="/report/audit-log" class="btn btn-secondary w-100">Clear</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-3">
+      <h6 class="m-0 fw-bold text-primary">User Activity</h6>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-bordered" id="dataTable">
+          <thead class="table-light">
+            <tr>
+              <th>Timestamp</th>
+              <th>User</th>
+              <th>Action</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (logs.length === 0) { %>
+              <tr>
+                <td colspan="4" class="text-center">No logs found matching your criteria.</td>
+              </tr>
+            <% } else { %>
+              <% logs.forEach(log => { %>
+                <tr>
+                  <td><%= new Date(log.timestamp).toLocaleString() %></td>
+                  <td><%= log.username %></td>
+                  <td><%= log.action %></td>
+                  <td><%= log.details %></td>
+                </tr>
+              <% }) %>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination Controls -->
+      <% if (pagination && pagination.totalPages > 1) { %>
+        <nav aria-label="Page navigation">
+          <ul class="pagination justify-content-center mt-4">
+            <li class="page-item <%= (pagination.currentPage === 1) ? 'disabled' : '' %>">
+              <a class="page-link" href="/report/audit-log?q=<%= filters.q %>&page=<%= pagination.currentPage - 1 %>">&laquo;</a>
+            </li>
+            <% 
+              const pageNumbers = [];
+              for (let i = 1; i <= pagination.totalPages; i++) {
+                if (i === 1 || i === pagination.totalPages || (i >= pagination.currentPage - 2 && i <= pagination.currentPage + 2)) {
+                  if (pageNumbers.length > 0 && i - pageNumbers[pageNumbers.length - 1] > 1) {
+                    pageNumbers.push('...');
+                  }
+                  pageNumbers.push(i);
+                }
+              }
+            %>
+            <% pageNumbers.forEach(p => { %>
+              <% if (p === '...') { %>
+                <li class="page-item disabled"><span class="page-link">...</span></li>
+              <% } else { %>
+                <li class="page-item <%= (p === pagination.currentPage) ? 'active' : '' %>"><a class="page-link" href="/report/audit-log?q=<%= filters.q %>&page=<%= p %>"><%= p %></a></li>
+              <% } %>
+            <% }) %>
+            <li class="page-item <%= (pagination.currentPage === pagination.totalPages) ? 'disabled' : '' %>">
+              <a class="page-link" href="/report/audit-log?q=<%= filters.q %>&page=<%= pagination.currentPage + 1 %>">&raquo;</a>
+            </li>
+          </ul>
+        </nav>
+      <% } %>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

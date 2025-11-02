@@ -1,0 +1,99 @@
+<%- include('partials/header') %>
+
+<%- include('partials/ticketingSubNav') %>
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-7">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h4 class="mb-0"><%= title %>: <strong><%= account.staff_name %></strong></h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert <%= account.balance < 0 ? 'alert-danger' : 'alert-success' %>">
+                        <h5 class="alert-heading">Current Balance</h5>
+                        <p class="fs-4 fw-bold mb-0">
+                            <%= account.balance < 0 ? 'Shortage of' : 'Excess of' %>
+                            ₹<%= Math.abs(account.balance).toFixed(2) %>
+                        </p>
+                    </div>
+
+                    <form action="/ticketing/report/staff-accounts/settle/<%= account.staff_id %>" method="POST">
+                        <p>
+                            <% if (account.balance < 0) { %>
+                                To settle this account, you should collect <strong>₹<%= Math.abs(account.balance).toFixed(2) %></strong> from the staff member. This will be recorded as income.
+                            <% } else { %>
+                                To settle this account, you should pay <strong>₹<%= account.balance.toFixed(2) %></strong> to the staff member. This will be recorded as an expense.
+                            <% } %>
+                        </p>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="settled_amount" class="form-label">Amount to Settle</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">₹</span>
+                                    <input type="number" class="form-control" id="settled_amount" name="settled_amount" value="<%= Math.abs(account.balance).toFixed(2) %>" step="0.01" min="0.01" max="<%= Math.abs(account.balance).toFixed(2) %>" required autofocus>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="remarks" class="form-label">Remarks (Optional)</label>
+                            <textarea class="form-control" id="remarks" name="remarks" rows="2" placeholder="e.g., Settled in cash"></textarea>
+                        </div>
+
+                        <hr>
+
+                        <div class="d-flex justify-content-between align-items-center gap-2">
+                            <a href="/ticketing/report/staff-accounts" class="btn btn-secondary">
+                                <i class="bi bi-x-circle me-1"></i>Cancel
+                            </a>
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#writeOffModal">
+                                    <i class="bi bi-journal-x me-1"></i> Write-off Balance
+                                </button>
+                                <button type="submit" class="btn btn-primary" onclick="return confirm('Are you sure you want to settle this balance? This action will be recorded in the main accounts.');">
+                                    <i class="bi bi-check-circle me-1"></i>Confirm Settlement
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Write-off Modal -->
+<div class="modal fade" id="writeOffModal" tabindex="-1" aria-labelledby="writeOffModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="writeOffModalLabel">Confirm Balance Write-off</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form action="/ticketing/report/staff-accounts/write-off/<%= account.staff_id %>" method="POST" id="writeOffForm">
+        <div class="modal-body">
+            <p>You are about to write-off the balance for <strong><%= account.staff_name %></strong>.</p>
+            <div class="alert alert-warning">
+                <% if (account.balance < 0) { %>
+                    This will clear the staff member's <strong>shortage of ₹<%= Math.abs(account.balance).toFixed(2) %></strong> and record it as an expense for the company. No cash is collected.
+                <% } else { %>
+                    This will clear the staff member's <strong>excess of ₹<%= account.balance.toFixed(2) %></strong> and record it as income for the company. The staff member will not be paid this amount.
+                <% } %>
+            </div>
+            <div class="mb-3">
+                <label for="writeoff_remarks" class="form-label">Write-off Remarks (Required)</label>
+                <textarea class="form-control" id="writeoff_remarks" name="remarks" rows="2" placeholder="e.g., Unrecoverable shortage" required></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger">Confirm Write-off</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

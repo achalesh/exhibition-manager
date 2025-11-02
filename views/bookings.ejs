@@ -1,0 +1,86 @@
+<%- include('partials/header') %>
+
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><%= title %></h2>
+    <a href="/booking/add" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Add New Booking</a>
+  </div>
+
+  <% if (message) { %>
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+      <%= message %>
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+  <% } %>
+
+  <!-- Filter form -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <form method="GET" action="/booking/list" class="row g-3 align-items-end">
+        <div class="col-md-4">
+          <label for="form_status" class="form-label">Filter by Form Status</label>
+          <select id="form_status" name="form_status" class="form-select" onchange="this.form.submit()">
+            <option value="all" <%= currentFilter === 'all' ? 'selected' : '' %>>All Bookings</option>
+            <option value="submitted" <%= currentFilter === 'submitted' ? 'selected' : '' %>>Form Submitted</option>
+            <option value="not_submitted" <%= currentFilter === 'not_submitted' ? 'selected' : '' %>>Form Not Submitted</option>
+          </select>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <table class="table table-hover align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Space</th>
+            <th>Exhibitor</th>
+            <th>Facia Name</th>
+            <th class="text-end">Rent (₹)</th>
+            <% if (user && user.role === 'admin') { %>
+              <th class="text-end">Due (₹)</th>
+            <% } %>
+            <th>Form Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (bookings && bookings.length > 0) { %>
+            <% bookings.forEach(booking => { %>
+              <tr>
+                <td><span class="badge bg-info text-dark"><%= booking.space_name %></span></td>
+                <td><%= booking.client_name %></td>
+                <td><%= booking.facia_name || 'N/A' %></td>
+                <td class="text-end"><%= (booking.rent_amount || 0).toFixed(2) %></td>
+                <% if (user && user.role === 'admin') { %>
+                  <td class="text-end fw-bold <%= booking.due_amount > 0 ? 'text-danger' : '' %>"><%= (booking.due_amount || 0).toFixed(2) %></td>
+                <% } %>
+                <td>
+                  <% if (booking.form_submitted) { %>
+                    <span class="badge bg-success">Submitted</span>
+                  <% } else { %>
+                    <span class="badge bg-warning text-dark">Pending</span>
+                  <% } %>
+                </td>
+                <td>
+                  <a href="/booking/details-full/<%= booking.id %>" class="btn btn-sm btn-outline-primary">Details</a>
+                  <a href="/booking/edit/<%= booking.id %>" class="btn btn-sm btn-outline-secondary">Edit</a>
+                  <% if (user && user.role === 'admin') { %>
+                    <a href="/booking/delete/<%= booking.id %>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Are you sure you want to delete this booking? This cannot be undone.');">Delete</a>
+                  <% } %>
+                </td>
+              </tr>
+            <% }); %>
+          <% } else { %>
+            <tr>
+              <td colspan="7" class="text-center text-muted">No bookings found for this filter.</td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

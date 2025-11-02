@@ -1,0 +1,79 @@
+<%- include('partials/header') %>
+
+<div class="container-fluid">
+  <h1 class="h3 mb-4 text-gray-800"><%= title %></h1>
+
+  <div class="card shadow-sm">
+    <div class="card-header py-3">
+      <h6 class="m-0 fw-bold text-primary">Editing Payment #<%= payment.id %></h6>
+    </div>
+    <div class="card-body">
+      <form action="/charges/edit/<%= payment.id %>" method="POST">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="booking_id" class="form-label">Exhibitor</label>
+            <select id="booking_id" name="booking_id" class="form-select" disabled>
+              <% bookings.forEach(b => { %>
+                <option value="<%= b.id %>" <%= payment.booking_id === b.id ? 'selected' : '' %>>
+                  <%= b.exhibitor_name %> (<%= b.space_name %>)
+                </option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label for="receipt_number" class="form-label">Receipt Number</label>
+            <input type="text" class="form-control" id="receipt_number" name="receipt_number" value="<%= payment.receipt_number %>">
+          </div>
+          <div class="col-md-6">
+            <label for="payment_date" class="form-label">Payment Date</label>
+            <input type="date" class="form-control" id="payment_date" name="payment_date" value="<%= payment.payment_date %>" required>
+          </div>
+          <div class="col-md-6">
+            <label for="payment_type" class="form-label">Payment For</label>
+            <input type="text" class="form-control" id="payment_type" name="payment_type" value="<%= payment.type %>" readonly>
+          </div>
+          <div class="col-md-4">
+            <label for="cash_paid" class="form-label">Cash Amount Paid</label>
+            <input type="number" step="0.01" class="form-control" id="cash_paid" name="cash_paid" value="<%= payment.cash_paid %>" placeholder="0.00">
+          </div>
+          <div class="col-md-4">
+            <label for="upi_paid" class="form-label">UPI Amount Paid</label>
+            <input type="number" step="0.01" class="form-control" id="upi_paid" name="upi_paid" value="<%= payment.upi_paid %>" placeholder="0.00">
+          </div>
+          <div class="col-md-4">
+            <label for="total_paid" class="form-label">Total Amount</label>
+            <input type="text" class="form-control" id="total_paid" readonly>
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <button type="submit" class="btn btn-primary">Update Payment</button>
+          <a href="/booking/details-full/<%= payment.booking_id %>" class="btn btn-secondary">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const cashInput = document.getElementById('cash_paid');
+    const upiInput = document.getElementById('upi_paid');
+    const totalDisplay = document.getElementById('total_paid');
+
+    function calculateTotal() {
+      const cash = parseFloat(cashInput.value) || 0;
+      const upi = parseFloat(upiInput.value) || 0;
+      const total = cash + upi;
+      totalDisplay.value = '₹' + total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    cashInput.addEventListener('input', calculateTotal);
+    upiInput.addEventListener('input', calculateTotal);
+
+    // Initial calculation on page load
+    calculateTotal();
+  });
+</script>
+
+<%- include('partials/footer') %>

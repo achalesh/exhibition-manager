@@ -1,0 +1,79 @@
+<%- include('partials/header') %>
+
+<div class="container mt-4">
+  <div class="card">
+    <div class="card-header">
+      <h2><%= title %> for <%= editRequest.exhibitor_name %></h2>
+      <p class="mb-0">Requested by <strong><%= editRequest.username %></strong> on <%= new Date(editRequest.request_date).toLocaleString() %></p>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <!-- Current Data -->
+        <div class="col-md-6">
+          <h4>Current Data</h4>
+          <dl class="row">
+            <dt class="col-sm-4">Receipt #</dt>
+            <dd class="col-sm-8"><%= currentPayment.receipt_number || 'N/A' %></dd>
+            <dt class="col-sm-4">Payment Date</dt>
+            <dd class="col-sm-8"><%= new Date(currentPayment.payment_date).toLocaleDateString() %></dd>
+            <dt class="col-sm-4">Amount</dt>
+            <dd class="col-sm-8">₹<%= (currentPayment.rent_paid + currentPayment.electric_paid + currentPayment.material_paid + currentPayment.shed_paid).toFixed(2) %></dd>
+          </dl>
+        </div>
+
+        <!-- Proposed Changes -->
+        <div class="col-md-6">
+          <h4>Proposed Changes</h4>
+          <dl class="row">
+            <dt class="col-sm-4">Receipt #</dt>
+            <dd class="col-sm-8 <%= String(currentPayment.receipt_number || '') !== String(proposedData.receipt_number || '') ? 'bg-warning' : '' %>"><%= proposedData.receipt_number || 'N/A' %></dd>
+            <dt class="col-sm-4">Payment Date</dt>
+            <dd class="col-sm-8 <%= new Date(currentPayment.payment_date).toISOString().split('T')[0] !== proposedData.payment_date ? 'bg-warning' : '' %>"><%= new Date(proposedData.payment_date).toLocaleDateString() %></dd>
+            <dt class="col-sm-4">Amount</dt>
+            <dd class="col-sm-8 <%= (currentPayment.rent_paid + currentPayment.electric_paid + currentPayment.material_paid + currentPayment.shed_paid) != proposedData.amount_paid ? 'bg-warning' : '' %>">₹<%= parseFloat(proposedData.amount_paid).toFixed(2) %></dd>
+          </dl>
+        </div>
+      </div>
+
+      <hr>
+
+      <!-- Action Buttons -->
+      <div class="d-flex justify-content-end">
+        <button type="button" class="btn btn-danger me-2" data-bs-toggle="modal" data-bs-target="#rejectModal">
+          <i class="bi bi-x-circle me-1"></i> Reject
+        </button>
+        <form action="/charges/approve/<%= editRequest.id %>" method="POST" onsubmit="return confirm('Are you sure you want to approve and apply these changes?');">
+          <button type="submit" class="btn btn-success">
+            <i class="bi bi-check-circle me-1"></i> Approve & Save
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Rejection Modal -->
+<div class="modal fade" id="rejectModal" tabindex="-1" aria-labelledby="rejectModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form action="/charges/reject/<%= editRequest.id %>" method="POST">
+        <div class="modal-header">
+          <h5 class="modal-title" id="rejectModalLabel">Reason for Rejection</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="rejection_reason" class="form-label">Please provide a reason for rejecting this payment edit. This will be shown to the user.</label>
+            <textarea class="form-control" id="rejection_reason" name="rejection_reason" rows="3" required></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger">Confirm Rejection</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

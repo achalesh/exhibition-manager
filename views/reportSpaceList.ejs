@@ -1,0 +1,203 @@
+<%- include('partials/header') %>
+
+<div class="card">
+    <div class="card-header">
+        <div class="row">
+            <div class="col-md-6">
+                <h3 class="mb-0">Spaces Report</h3>
+            </div>
+            <div class="col-md-4">
+                <input type="text" id="searchInput" class="form-control" placeholder="Search spaces...">
+            </div>
+            <div class="col-md-2 text-end">
+                <button onclick="window.print()" class="btn btn-primary d-print-none me-1" title="Print Report"><i class="fas fa-print"></i> Print</button>
+                <button id="download-excel" class="btn btn-success d-print-none" title="Download Excel"><i class="fas fa-file-excel"></i> Excel</button>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table id="spacesTable" class="table table-bordered table-striped table-hover">
+                <thead class="thead-dark">
+                    <tr>
+                        <th data-sort-dir="asc"># <i class="fas fa-sort"></i></th>
+                        <th data-sort-dir="asc">Type <i class="fas fa-sort"></i></th>
+                        <th data-sort-dir="asc">Name <i class="fas fa-sort"></i></th>
+                        <th data-sort-dir="asc">Size <i class="fas fa-sort"></i></th>
+                        <th class="text-right" data-sort-dir="asc">Rent Amount <i class="fas fa-sort"></i></th>
+                        <th data-sort-dir="asc">Status <i class="fas fa-sort"></i></th>
+                    </tr>
+                </thead>
+                <tbody id="spacesTableBody">
+                    <% if (spaces && spaces.length > 0) { %>
+                        <% spaces.forEach((space, index) => { %>
+                            <tr>
+                                <td><%= index + 1 %></td>
+                                <td><%= space.type %></td>
+                                <td><%= space.name %></td>
+                                <td><%= space.size %></td>
+                                <td class="text-right"><%= (space.rent_amount || 0).toFixed(2) %></td>
+                                <td><%= space.status %></td>
+                            </tr>
+                        <% }); %>
+                    <% } else { %>
+                        <tr>
+                            <td colspan="6" class="text-center">No spaces found.</td>
+                        </tr>
+                    <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card-footer d-flex justify-content-between align-items-center d-print-none">
+        <div>
+            <select id="rowsPerPage" class="form-select form-select-sm" style="width: auto; display: inline-block;">
+                <option value="10">10</option>
+                <option value="25" selected>25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+            </select>
+            <span id="pagination-info" class="ms-2 text-muted"></span>
+        </div>
+        <nav>
+            <ul id="pagination" class="pagination pagination-sm mb-0"></ul>
+        </nav>
+    </div>
+</div>
+
+<script>
+    // For sorting icons, you'll need Font Awesome. If not already included, add this to your header:
+    // <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" />
+
+    document.getElementById('download-excel').addEventListener('click', function() {
+        // Trigger Excel download
+        window.location.href = '/report/downloadExcelSpaces';
+    });
+
+    const table = document.getElementById('spacesTable');
+    const tableBody = document.getElementById('spacesTableBody');
+    const allRows = Array.from(tableBody.querySelectorAll('tr'));
+    table.querySelectorAll('thead th').forEach((header, colIndex) => {
+        header.addEventListener('click', () => {
+            const sortDir = header.dataset.sortDir;
+            const newSortDir = sortDir === 'asc' ? 'desc' : 'asc';
+            header.dataset.sortDir = newSortDir;
+
+            // Reset icons
+            table.querySelectorAll('thead th i').forEach(i => {
+                i.className = 'fas fa-sort';
+            });
+            // Set current icon
+            header.querySelector('i').className = newSortDir === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down';
+
+            const rows = Array.from(allRows);
+
+            rows.sort((a, b) => {
+                let valA = a.cells[colIndex].textContent.trim();
+                let valB = b.cells[colIndex].textContent.trim();
+
+                // For numeric columns (like # and Rent Amount)
+                if (!isNaN(valA.replace(/,/g, '')) && !isNaN(valB.replace(/,/g, ''))) {
+                    valA = parseFloat(valA.replace(/,/g, ''));
+                    valB = parseFloat(valB.replace(/,/g, ''));
+                } else {
+                    valA = valA.toLowerCase();
+                    valB = valB.toLowerCase();
+                }
+
+                if (valA < valB) {
+                    return newSortDir === 'asc' ? -1 : 1;
+                }
+                if (valA > valB) {
+                    return newSortDir === 'asc' ? 1 : -1;
+                }
+                return 0;
+            });
+
+            allRows.splice(0, allRows.length, ...rows);
+            renderTable();
+        });
+    });
+
+    // --- Pagination and Search ---
+    const searchInput = document.getElementById('searchInput');
+    const rowsPerPageSelect = document.getElementById('rowsPerPage');
+    const paginationContainer = document.getElementById('pagination');
+    const paginationInfo = document.getElementById('pagination-info');
+
+    let currentPage = 1;
+    let rowsPerPage = parseInt(rowsPerPageSelect.value, 10);
+    let filteredRows = [...allRows];
+
+    function renderTable() {
+        tableBody.innerHTML = '';
+        const start = (currentPage - 1) * rowsPerPage;
+        const end = start + rowsPerPage;
+        const paginatedRows = filteredRows.slice(start, end);
+
+        paginatedRows.forEach(row => tableBody.appendChild(row));
+
+        setupPagination();
+        updatePaginationInfo();
+    }
+
+    function setupPagination() {
+        paginationContainer.innerHTML = '';
+        const pageCount = Math.ceil(filteredRows.length / rowsPerPage);
+
+        // Previous button
+        const prevLi = document.createElement('li');
+        prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+        prevLi.innerHTML = `<a class="page-link" href="#" data-page="${currentPage - 1}">Previous</a>`;
+        paginationContainer.appendChild(prevLi);
+
+        // Page numbers (simplified for brevity)
+        for (let i = 1; i <= pageCount; i++) {
+            const li = document.createElement('li');
+            li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+            li.innerHTML = `<a class="page-link" href="#" data-page="${i}">${i}</a>`;
+            paginationContainer.appendChild(li);
+        }
+
+        // Next button
+        const nextLi = document.createElement('li');
+        nextLi.className = `page-item ${currentPage === pageCount ? 'disabled' : ''}`;
+        nextLi.innerHTML = `<a class="page-link" href="#" data-page="${currentPage + 1}">Next</a>`;
+        paginationContainer.appendChild(nextLi);
+    }
+
+    function updatePaginationInfo() {
+        const start = Math.min((currentPage - 1) * rowsPerPage + 1, filteredRows.length);
+        const end = Math.min(start + rowsPerPage - 1, filteredRows.length);
+        paginationInfo.textContent = `Showing ${start} to ${end} of ${filteredRows.length} entries`;
+    }
+
+    searchInput.addEventListener('keyup', () => {
+        const searchTerm = searchInput.value.toLowerCase();
+        filteredRows = allRows.filter(row => row.textContent.toLowerCase().includes(searchTerm));
+        currentPage = 1;
+        renderTable();
+    });
+
+    rowsPerPageSelect.addEventListener('change', () => {
+        rowsPerPage = parseInt(rowsPerPageSelect.value, 10);
+        currentPage = 1;
+        renderTable();
+    });
+
+    paginationContainer.addEventListener('click', e => {
+        if (e.target.tagName === 'A' && e.target.dataset.page) {
+            e.preventDefault();
+            const page = parseInt(e.target.dataset.page, 10);
+            if (page > 0 && page <= Math.ceil(filteredRows.length / rowsPerPage)) {
+                currentPage = page;
+                renderTable();
+            }
+        }
+    });
+
+    // Initial render
+    renderTable();
+</script>
+
+<%- include('partials/footer') %>

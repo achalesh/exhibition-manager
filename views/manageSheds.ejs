@@ -1,0 +1,130 @@
+<%- include('partials/header') %>
+
+<div class="container mt-4">
+  <!-- Add Shed Form -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h4>Add New Shed</h4>
+    </div>
+    <div class="card-body">
+      <form action="/shed/add" method="POST" class="row g-3">
+        <div class="col-md-4">
+          <label for="name" class="form-label">Shed Name</label>
+          <input type="text" class="form-control" id="name" name="name" required>
+        </div>
+        <div class="col-md-4">
+          <label for="size" class="form-label">Size (e.g., 10x10)</label>
+          <input type="text" class="form-control" id="size" name="size">
+        </div>
+        <div class="col-md-3">
+          <label for="rent" class="form-label">Rent (₹)</label>
+          <input type="number" class="form-control" id="rent" name="rent" required>
+        </div>
+        <div class="col-md-1 d-flex align-items-end">
+          <button type="submit" class="btn btn-primary w-100">Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Existing Sheds Table -->
+  <div class="card">
+    <div class="card-header">
+      <h4>Existing Sheds</h4>
+    </div>
+    <div class="card-body">
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Size</th>
+            <th>Rent (₹)</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% sheds.forEach(shed => { %>
+            <tr>
+              <td><%= shed.name %></td>
+              <td><%= shed.size %></td>
+              <td><%= (shed.rent || 0).toFixed(2) %></td>
+              <td>
+                <span class="badge <%= shed.status === 'Available' ? 'bg-success' : 'bg-danger' %>">
+                  <%= shed.status %>
+                </span>
+              </td>
+              <td>
+                <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editShedModal" data-id="<%= shed.id %>" data-name="<%= shed.name %>" data-size="<%= shed.size %>" data-rent="<%= shed.rent %>">
+                  Edit
+                </button>
+                <form action="/shed/delete/<%= shed.id %>" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this shed?');">
+                  <button type="submit" class="btn btn-sm btn-danger" <%= shed.status === 'Allocated' ? 'disabled' : '' %>>
+                    Delete
+                  </button>
+                </form>
+              </td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Shed Modal -->
+<div class="modal fade" id="editShedModal" tabindex="-1" aria-labelledby="editShedModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="editShedForm" method="POST">
+        <div class="modal-header">
+          <h5 class="modal-title" id="editShedModalLabel">Edit Shed</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="edit_name" class="form-label">Shed Name</label>
+            <input type="text" class="form-control" id="edit_name" name="name" required>
+          </div>
+          <div class="mb-3">
+            <label for="edit_size" class="form-label">Size</label>
+            <input type="text" class="form-control" id="edit_size" name="size">
+          </div>
+          <div class="mb-3">
+            <label for="edit_rent" class="form-label">Rent (₹)</label>
+            <input type="number" class="form-control" id="edit_rent" name="rent" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn btn-primary">Save changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  const editShedModal = document.getElementById('editShedModal');
+  editShedModal.addEventListener('show.bs.modal', function (event) {
+    const button = event.relatedTarget;
+    const shedId = button.getAttribute('data-id');
+    const shedName = button.getAttribute('data-name');
+    const shedSize = button.getAttribute('data-size');
+    const shedRent = button.getAttribute('data-rent');
+
+    const modalTitle = editShedModal.querySelector('.modal-title');
+    const modalForm = editShedModal.querySelector('#editShedForm');
+    const nameInput = editShedModal.querySelector('#edit_name');
+    const sizeInput = editShedModal.querySelector('#edit_size');
+    const rentInput = editShedModal.querySelector('#edit_rent');
+
+    modalTitle.textContent = `Edit Shed: ${shedName}`;
+    modalForm.action = `/shed/edit/${shedId}`;
+    nameInput.value = shedName;
+    sizeInput.value = shedSize;
+    rentInput.value = shedRent;
+  });
+</script>
+
+<%- include('partials/footer') %>

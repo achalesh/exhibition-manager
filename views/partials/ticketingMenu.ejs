@@ -1,0 +1,22 @@
+<% if (user && (user.role === 'admin' || user.role === 'ticketing_manager')) { %>
+<li class="nav-item dropdown">
+    <a class="nav-link dropdown-toggle <%= (currentPath.startsWith('/ticketing')) ? 'active' : '' %>" href="#" id="ticketingDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+        <i class="bi bi-ticket-perforated me-1"></i>Ticketing
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="ticketingDropdown">
+        <li><a class="dropdown-item" href="/ticketing"><i class="bi bi-bar-chart-line me-2"></i>Sales Dashboard</a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><h6 class="dropdown-header">Management</h6></li>
+        <li><a class="dropdown-item" href="/ticketing/stock"><i class="bi bi-stack me-2"></i>Manage Stock</a></li>
+        <li><a class="dropdown-item" href="/ticketing/distribute"><i class="bi bi-send me-2"></i>Distribute Tickets</a></li>
+        <li><a class="dropdown-item" href="/ticketing/settle"><i class="bi bi-receipt-cutoff me-2"></i>Settle Sales</a></li>
+        <li><a class="dropdown-item" href="/ticketing/rides"><i class="bi bi-joystick me-2"></i>Manage Rides</a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><h6 class="dropdown-header">Reports</h6></li>
+        <li><a class="dropdown-item" href="/ticketing/report/daily"><i class="bi bi-calendar-date me-2"></i>Daily Sales Report</a></li>
+        <li><a class="dropdown-item" href="/ticketing/report/stock"><i class="bi bi-clipboard-data me-2"></i>Stock Status Report</a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item" href="/ticketing/import"><i class="bi bi-upload me-2"></i>Import Past Sales</a></li>
+    </ul>
+</li>
+<% } %>
