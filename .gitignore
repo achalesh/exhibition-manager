@@ -1,9 +1,23 @@
-# SQLite database
-*.db
-*.db-journal
+# Dependencies
+/node_modules
 
-# Node.js dependencies
-node_modules/
+# Production databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # Environment variables
 .env
+
+# Generated content
+/public/qrcodes/
+/public/uploads/
+
+# OS-generated files
+.DS_Store
+Thumbs.db
