@@ -2,7 +2,6 @@
 /node_modules
 
 # Production databases
-*.db
 *.sqlite
 *.sqlite3
 
