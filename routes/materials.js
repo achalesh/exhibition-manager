@@ -20,10 +20,69 @@ const upload = multer({ storage: multer.memoryStorage() });
 // GET: List all materials in stock
 router.get('/', async (req, res) => {
     try {
-        const materials = await all('SELECT * FROM material_stock ORDER BY created_at DESC');
+        const { q, status, page = 1 } = req.query;
+        const limit = 50; // Items per page
+
+        // Build the query for fetching the list of materials
+        let materialsSql = 'SELECT * FROM material_stock';
+        const whereClauses = [];
+        const params = [];
+
+        if (q) {
+            whereClauses.push('(name LIKE ? OR unique_id LIKE ?)');
+            params.push(`%${q}%`, `%${q}%`);
+        }
+
+        if (status && status !== 'all') {
+            whereClauses.push('status = ?');
+            params.push(status);
+        }
+
+        if (whereClauses.length > 0) {
+            materialsSql += ` WHERE ${whereClauses.join(' AND ')}`;
+        }
+
+        // Get total count for pagination
+        const countSql = `SELECT COUNT(*) as count FROM material_stock ${whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : ''}`;
+        const totalResult = await get(countSql, params);
+        const totalItems = totalResult.count || 0;
+        const totalPages = Math.ceil(totalItems / limit);
+        const currentPage = parseInt(page);
+        const offset = (currentPage - 1) * limit;
+
+        materialsSql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+        const fullParams = [...params, limit, offset];
+
+        const pagination = {
+            currentPage,
+            totalPages,
+            hasPrevPage: currentPage > 1,
+            hasNextPage: currentPage < totalPages,
+            totalItems
+        };
+
+        // Fetch materials and summary in parallel
+        const [materials, summaryData] = await Promise.all([
+            all(materialsSql, fullParams),
+            all('SELECT name, status, COUNT(*) as count FROM material_stock GROUP BY name, status')
+        ]);
+
+        // Process summary data into a structured object for the view
+        const materialSummary = (summaryData || []).reduce((acc, row) => {
+            if (!acc[row.name]) {
+                acc[row.name] = { Total: 0, Available: 0, Issued: 0, Damaged: 0 };
+            }
+            acc[row.name][row.status] = row.count;
+            acc[row.name].Total += row.count;
+            return acc;
+        }, {});
+
         res.render('manageMaterials', {
             title: 'Manage Material Stock',
             materials: materials || [],
+            materialSummary,
+            pagination,
+            filters: { q: q || '', status: status || 'all' },
             message: req.query.message
         });
     } catch (err) {
@@ -48,21 +107,43 @@ router.post('/add', async (req, res) => {
         return res.status(400).send('Material Name is required.');
     }
 
+    const activeSession = res.locals.activeSession;
+    const locationCode = (activeSession.location || 'GNR').substring(0, 3).toUpperCase();
+    const materialCode = name.substring(0, 1).toUpperCase();
+    const prefix = `NCF/${materialCode}/${locationCode}`;
+
     try {
-        const { v4: uuidv4 } = await import('uuid');
+        // Find the next sequence number for this prefix
+        const lastMaterial = await get(
+            'SELECT MAX(sequence) as max_seq FROM material_stock WHERE unique_id LIKE ?',
+            [`${prefix}/%`]
+        );
+        let nextSequence = (lastMaterial?.max_seq || 0) + 1;
+
+        const logoPath = activeSession.logo_path ? path.join(__dirname, '..', 'public', activeSession.logo_path) : null;
+
         for (let i = 0; i < numQuantity; i++) {
-            const uniqueId = uuidv4();
-            const qrCodeFileName = `${uniqueId}.png`;
+            const sequenceString = (nextSequence + i).toString().padStart(4, '0');
+            const uniqueId = `${prefix}/${sequenceString}`;
+            const qrCodeFileName = `${uniqueId.replace(/\//g, '-')}.png`;
             const qrCodePath = path.join(qrCodeDir, qrCodeFileName);
             const qrCodeUrlPath = `/qrcodes/${qrCodeFileName}`;
 
             // Generate QR code and save as a file
-            await qrcode.toFile(qrCodePath, uniqueId);
+            const qrOptions = {
+                errorCorrectionLevel: 'H', // High correction for logo
+                width: 256
+            };
+            if (logoPath && fs.existsSync(logoPath)) {
+                await qrcode.toFile(qrCodePath, uniqueId, qrOptions);
+            } else {
+                await qrcode.toFile(qrCodePath, uniqueId);
+            }
 
             // Insert into database
             await run(
-                'INSERT INTO material_stock (name, description, unique_id, qr_code_path) VALUES (?, ?, ?, ?)',
-                [name, description, uniqueId, qrCodeUrlPath]
+                'INSERT INTO material_stock (name, description, unique_id, qr_code_path, sequence, event_session_id) VALUES (?, ?, ?, ?, ?, ?)',
+                [name, description, uniqueId, qrCodeUrlPath, nextSequence + i, activeSession.id]
             );
         }
 
@@ -97,9 +178,12 @@ router.post('/bulk-upload', upload.single('materialsCsv'), async (req, res) => {
         })
         .on('end', async () => {
             try {
-                const { v4: uuidv4 } = await import('uuid');
                 let itemsAddedCount = 0;
+                const activeSession = res.locals.activeSession;
+                const locationCode = (activeSession.location || 'GNR').substring(0, 3).toUpperCase();
+                const logoPath = activeSession.logo_path ? path.join(__dirname, '..', 'public', activeSession.logo_path) : null;
 
+                // Group materials by prefix to manage sequences
                 for (const material of materialsToProcess) {
                     const name = material.name;
                     const description = material.description || '';
@@ -107,17 +191,30 @@ router.post('/bulk-upload', upload.single('materialsCsv'), async (req, res) => {
 
                     if (!name) continue; // Skip rows without a name
 
+                    const materialCode = name.substring(0, 1).toUpperCase();
+                    const prefix = `NCF/${materialCode}/${locationCode}`;
+
+                    const lastMaterial = await get('SELECT MAX(sequence) as max_seq FROM material_stock WHERE unique_id LIKE ?', [`${prefix}/%`]);
+                    let nextSequence = (lastMaterial?.max_seq || 0) + 1;
+
                     for (let i = 0; i < quantity; i++) {
-                        const uniqueId = uuidv4();
-                        const qrCodeFileName = `${uniqueId}.png`;
+                        const currentSequence = nextSequence + i;
+                        const sequenceString = currentSequence.toString().padStart(4, '0');
+                        const uniqueId = `${prefix}/${sequenceString}`;
+                        const qrCodeFileName = `${uniqueId.replace(/\//g, '-')}.png`;
                         const qrCodePath = path.join(qrCodeDir, qrCodeFileName);
                         const qrCodeUrlPath = `/qrcodes/${qrCodeFileName}`;
 
-                        await qrcode.toFile(qrCodePath, uniqueId);
+                        const qrOptions = { errorCorrectionLevel: 'H', width: 256 };
+                        if (logoPath && fs.existsSync(logoPath)) {
+                            await qrcode.toFile(qrCodePath, uniqueId, qrOptions);
+                        } else {
+                            await qrcode.toFile(qrCodePath, uniqueId);
+                        }
 
                         await run(
-                            'INSERT INTO material_stock (name, description, unique_id, qr_code_path) VALUES (?, ?, ?, ?)',
-                            [name, description, uniqueId, qrCodeUrlPath]
+                            'INSERT INTO material_stock (name, description, unique_id, qr_code_path, sequence, event_session_id) VALUES (?, ?, ?, ?, ?, ?)',
+                            [name, description, uniqueId, qrCodeUrlPath, currentSequence, activeSession.id]
                         );
                         itemsAddedCount++;
                     }
@@ -134,14 +231,62 @@ router.post('/bulk-upload', upload.single('materialsCsv'), async (req, res) => {
 // POST: Delete a material from stock
 router.post('/delete/:id', async (req, res) => {
     const { id } = req.params;
+    // Find the QR code path before deleting
+    const material = await get('SELECT qr_code_path FROM material_stock WHERE id = ?', [id]);
     try {
-        // We can also delete the QR code image file from public/qrcodes if needed
         await run('DELETE FROM material_stock WHERE id = ?', [id]);
+        if (material && material.qr_code_path) {
+            const imagePath = path.join(__dirname, '..', 'public', material.qr_code_path);
+            if (fs.existsSync(imagePath)) {
+                fs.unlinkSync(imagePath);
+            }
+        }
         await logAction(req.session.user.id, req.session.user.username, 'delete_material_stock', `Deleted material stock item #${id}`);
         res.redirect('/materials?message=Material deleted successfully.');
     } catch (err) {
         console.error('Error deleting material:', err.message);
         res.status(500).send('Failed to delete material. It might be in use.');
+    }
+});
+
+// POST: Bulk delete materials
+router.post('/bulk-delete', async (req, res) => {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).send('No materials selected for deletion.');
+    }
+    try {
+        const placeholders = ids.map(() => '?').join(',');
+        await run(`DELETE FROM material_stock WHERE id IN (${placeholders})`, ids);
+        await logAction(req.session.user.id, req.session.user.username, 'bulk_delete_material_stock', `Bulk deleted ${ids.length} material items.`);
+        res.redirect('/materials?message=Selected materials deleted successfully.');
+    } catch (err) {
+        console.error('Error bulk deleting materials:', err.message);
+        res.status(500).send('Failed to delete materials.');
+    }
+});
+
+// POST: Update a material's status (e.g., from Damaged to Available)
+router.post('/update-status/:id', async (req, res) => {
+    const { id } = req.params;
+    const { newStatus, redirectUrl } = req.body;
+
+    if (!newStatus) {
+        return res.status(400).send('New status is required.');
+    }
+
+    try {
+        const material = await get('SELECT id FROM material_stock WHERE id = ?', [id]);
+        if (!material) {
+            return res.status(404).send('Material not found.');
+        }
+        await run('UPDATE material_stock SET status = ? WHERE id = ?', [newStatus, id]);
+        // Log the status change
+        await run('INSERT INTO material_history (material_id, status, user_id, username) VALUES (?, ?, ?, ?)', [id, newStatus, req.session.user.id, req.session.user.username]);
+        res.redirect(`${redirectUrl || '/materials'}?message=Material status updated successfully.`);
+    } catch (err) {
+        console.error('Error updating material status:', err.message);
+        res.status(500).send('Failed to update material status.');
     }
 });
 
@@ -190,6 +335,9 @@ router.post('/api/issue-item', async (req, res) => {
         // Update the material's status and assign it to the client
         await run("UPDATE material_stock SET status = 'Issued', issued_to_client_id = ? WHERE id = ?", [clientId, material.id]);
 
+        // Log the action in the history table
+        await run('INSERT INTO material_history (material_id, status, client_id, user_id, username) VALUES (?, ?, ?, ?, ?)', [material.id, 'Issued', clientId, req.session.user.id, req.session.user.username]);
+
         await logAction(req.session.user.id, req.session.user.username, 'issue_material_stock', `Issued material #${material.id} (${material.name}) to client #${clientId}`);
         res.json({ success: true, message: `Successfully issued "${material.name}" to the client.` });
     } catch (err) {
@@ -230,6 +378,9 @@ router.post('/api/return-item', async (req, res) => {
         // Update the material's status and remove client assignment
         await run("UPDATE material_stock SET status = ?, issued_to_client_id = NULL WHERE id = ?", [newStatus, material.id]);
 
+        // Log the return action
+        await run('INSERT INTO material_history (material_id, status, client_id, user_id, username) VALUES (?, ?, ?, ?, ?)', [material.id, newStatus, material.issued_to_client_id, req.session.user.id, req.session.user.username]);
+
         const logDetails = `Material #${material.id} (${material.name}) was returned with status: ${newStatus}. It was previously issued to ${material.client_name || 'an unknown client'}.`;
         await logAction(req.session.user.id, req.session.user.username, 'return_material_stock', logDetails);
         
@@ -266,6 +417,73 @@ router.get('/issued-to/:clientId', async (req, res) => {
     } catch (err) {
         console.error('Error fetching issued materials for client:', err.message);
         res.status(500).send('Error loading page.');
+    }
+});
+
+// GET: Show history for a single material item
+router.get('/history/:id', async (req, res) => {
+    const materialId = req.params.id;
+    try {
+        const material = await get('SELECT id, name, unique_id, event_session_id FROM material_stock WHERE id = ?', [materialId]);
+        if (!material) {
+            return res.status(404).send('Material not found.');
+        }
+
+        const history = await all(`
+            SELECT 
+                h.timestamp,
+                h.status,
+                h.username,
+                c.name as client_name,
+                b.id as booking_id
+            FROM material_history h
+            LEFT JOIN clients c ON h.client_id = c.id
+            LEFT JOIN bookings b ON h.client_id = b.client_id AND b.event_session_id = ? AND b.booking_status = 'active'
+            WHERE h.material_id = ?
+            ORDER BY h.timestamp DESC
+        `, [material.event_session_id, materialId]);
+
+        res.render('materialHistory', {
+            title: `History for ${material.name}`,
+            material,
+            history: history || []
+        });
+    } catch (err) {
+        console.error('Error fetching material history:', err.message);
+        res.status(500).send('Error loading history page.');
+    }
+});
+
+// GET: Show a printable page with all QR codes
+router.get('/print-qrcodes', async (req, res) => {
+    try {
+        const { name: filterName } = req.query;
+
+        // Fetch distinct material names for the filter dropdown
+        const materialNamesResult = await all('SELECT DISTINCT name FROM material_stock ORDER BY name');
+        const materialNames = materialNamesResult.map(item => item.name);
+
+        let sql = 'SELECT unique_id, qr_code_path, name FROM material_stock';
+        const params = [];
+
+        if (filterName && filterName !== 'all') {
+            sql += ' WHERE name = ?';
+            params.push(filterName);
+        }
+
+        sql += ' ORDER BY name, id';
+
+        const materials = await all(sql, params);
+        res.render('printMaterialQRCodes', {
+            layout: false, // This tells EJS not to use the main layout file
+            title: 'Print All Material QR Codes',
+            materials: materials || [],
+            materialNames,
+            currentFilter: filterName || 'all'
+        });
+    } catch (err) {
+        console.error('Error fetching materials for printing:', err.message);
+        res.status(500).send('Error loading QR code print page.');
     }
 });
 

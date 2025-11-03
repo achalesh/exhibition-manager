@@ -1,129 +1,150 @@
 <%- include('partials/header') %>
 
 <div class="container mt-4">
-    <div class="card mx-auto" style="max-width: 800px;">
-        <div class="card-header">
-            <h3><%= title %></h3>
+  <div class="row justify-content-center">
+    <div class="col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+          <h4 class="mb-0"><%= title %></h4>
         </div>
         <div class="card-body">
-            <div class="row">
-                <!-- Left side: Scanner -->
-                <div class="col-md-6">
-                    <div class="mb-3">
-                        <label class="form-label"><strong>Set Return Status:</strong></label>
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="returnStatus" id="statusAvailable" value="Available" checked>
-                            <label class="form-check-label" for="statusAvailable">
-                                Available (Return to stock)
-                            </label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="returnStatus" id="statusDamaged" value="Damaged">
-                            <label class="form-check-label" for="statusDamaged">
-                                Damaged (Mark as unusable)
-                            </label>
-                        </div>
-                    </div>
-                    <div id="scanner-container" class="border rounded bg-light" style="width: 100%; min-height: 300px;">
-                        <!-- The QR Code scanner will be rendered here -->
-                    </div>
-                    <div id="scanner-status" class="form-text mt-2">Position a QR code in the frame to return an item.</div>
+          <p class="text-muted">Scan a material's QR code or enter its Unique ID below to process its return.</p>
 
-                    <div class="mt-4">
-                        <h5><strong>Or, Enter Manually:</strong></h5>
-                        <form id="manual-return-form">
-                            <div class="input-group">
-                                <input type="text" id="manual-unique-id" class="form-control" placeholder="Enter Material Unique ID">
-                                <button class="btn btn-outline-secondary" type="submit">Return Item</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+          <!-- QR Code Scanner Section -->
+          <div id="reader" style="width: 100%;" class="mb-3"></div>
+          <button id="start-scan-btn" class="btn btn-outline-primary w-100 mb-3"><i class="bi bi-qr-code-scan me-2"></i>Start Camera Scan</button>
+          <button id="stop-scan-btn" class="btn btn-outline-secondary w-100 mb-3" style="display: none;"><i class="bi bi-camera-video-off me-2"></i>Stop Scanning</button>
 
-                <!-- Right side: Scan Log -->
-                <div class="col-md-6">
-                    <h5><strong>Scan Log</strong></h5>
-                    <div id="scan-log" class="border rounded p-2" style="height: 400px; overflow-y: auto; background-color: #f8f9fa;">
-                        <p class="text-muted">Returned items will appear here...</p>
-                    </div>
-                </div>
-            </div>
+          <hr>
+
+          <div class="mb-3">
+            <label for="uniqueId" class="form-label">Material Unique ID</label>
+            <input type="text" class="form-control" id="uniqueId" placeholder="e.g., NCF/T/BLR/0001" autofocus>
+          </div>
+
+          <div class="d-grid gap-2">
+            <button id="return-btn" class="btn btn-success"><i class="bi bi-check-circle me-2"></i>Return to Stock</button>
+            <button id="damaged-btn" class="btn btn-danger"><i class="bi bi-exclamation-triangle me-2"></i>Mark as Damaged</button>
+          </div>
+
+          <div id="result-message" class="mt-4"></div>
         </div>
+      </div>
     </div>
+  </div>
 </div>
 
-<!-- Include the QR Code scanning library -->
-<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<!-- QR Scanner Library -->
+<script src="https://unpkg.com/html5-qrcode/html5-qrcode.min.js"></script>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const scannerStatus = document.getElementById('scanner-status');
-        const scanLog = document.getElementById('scan-log');
-        const manualForm = document.getElementById('manual-return-form');
-        const manualInput = document.getElementById('manual-unique-id');
-        const html5QrCode = new Html5Qrcode("scanner-container");
+document.addEventListener('DOMContentLoaded', function() {
+    const uniqueIdInput = document.getElementById('uniqueId');
+    const returnBtn = document.getElementById('return-btn');
+    const damagedBtn = document.getElementById('damaged-btn');
+    const resultMessage = document.getElementById('result-message');
+    const startScanBtn = document.getElementById('start-scan-btn');
+    const stopScanBtn = document.getElementById('stop-scan-btn');
+    const readerDiv = document.getElementById('reader');
 
-        // Refactored function to handle the API call for returning an item
-        function returnItem(uniqueId) {
-            const returnStatus = document.querySelector('input[name="returnStatus"]:checked').value;
+    async function handleReturn(status) {
+        const uniqueId = uniqueIdInput.value.trim();
+        if (!uniqueId) {
+            showMessage('Please enter a Unique ID.', 'warning');
+            return;
+        }
 
-            return fetch('/materials/api/return-item', {
+        // Disable buttons to prevent multiple submissions
+        returnBtn.disabled = true;
+        damagedBtn.disabled = true;
+
+        try {
+            const response = await fetch('/materials/api/return-item', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ uniqueId: uniqueId, status: returnStatus })
-            })
-            .then(response => response.json())
-            .then(data => {
-                logMessage(data.message, data.success ? 'success' : 'danger');
-            })
-            .catch(err => {
-                logMessage('An error occurred. Please check the console.', 'danger');
-                console.error(err);
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ uniqueId, status }),
             });
-        }
 
-        function onScanSuccess(decodedText, decodedResult) {
-            // Temporarily pause the scanner
-            html5QrCode.pause(true);
-            
-            returnItem(decodedText).finally(() => {
-                // Resume scanning after a short delay
-                setTimeout(() => html5QrCode.resume(), 1500);
-            });
-        }
+            const result = await response.json();
 
-        manualForm.addEventListener('submit', function(event) {
+            if (result.success) {
+                showMessage(result.message, 'success');
+                uniqueIdInput.value = ''; // Clear input on success
+            } else {
+                showMessage(result.message, 'danger');
+            }
+        } catch (error) {
+            console.error('Error during return:', error);
+            showMessage('A network error occurred. Please try again.', 'danger');
+        } finally {
+            // Re-enable buttons and refocus
+            returnBtn.disabled = false;
+            damagedBtn.disabled = false;
+            uniqueIdInput.focus();
+        }
+    }
+
+    function showMessage(message, type) {
+        resultMessage.innerHTML = `<div class="alert alert-${type}" role="alert">${message}</div>`;
+        // Clear the message after 5 seconds
+        setTimeout(() => {
+            resultMessage.innerHTML = '';
+        }, 5000);
+    }
+
+    // --- QR Code Scanner Logic ---
+    const html5QrCode = new Html5Qrcode("reader");
+
+    const qrCodeSuccessCallback = (decodedText, decodedResult) => {
+        // Handle on success condition with the decoded text or result.
+        console.log(`Scan result: ${decodedText}`, decodedResult);
+        uniqueIdInput.value = decodedText;
+        
+        // Optional: Automatically trigger the return action
+        // For now, we'll just fill the input and let the user choose the action.
+        
+        // Stop scanning after a successful scan
+        stopScanning();
+    };
+
+    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+    function startScanning() {
+        html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback)
+            .then(() => {
+                startScanBtn.style.display = 'none';
+                stopScanBtn.style.display = 'block';
+                readerDiv.style.border = '1px solid #dee2e6';
+            })
+            .catch(err => console.error("Unable to start scanning.", err));
+    }
+
+    function stopScanning() {
+        html5QrCode.stop()
+            .then(() => {
+                startScanBtn.style.display = 'block';
+                stopScanBtn.style.display = 'none';
+                readerDiv.style.border = 'none';
+            }).catch(err => console.error("Error stopping the scanner.", err));
+    }
+
+    returnBtn.addEventListener('click', () => handleReturn('Available'));
+    damagedBtn.addEventListener('click', () => handleReturn('Damaged'));
+
+    // Allow submitting with Enter key
+    uniqueIdInput.addEventListener('keypress', function(event) {
+        if (event.key === 'Enter') {
             event.preventDefault();
-            const uniqueId = manualInput.value.trim();
-            if (uniqueId) {
-                returnItem(uniqueId);
-                manualInput.value = ''; // Clear input after submission
-            }
+            // Default action on Enter is a standard return
+            returnBtn.click();
         }
-
-        function logMessage(message, type) {
-            const logEntry = document.createElement('div');
-            logEntry.className = `alert alert-${type} py-1 px-2 mb-1`;
-            logEntry.textContent = message;
-            
-            if (scanLog.querySelector('p.text-muted')) {
-                scanLog.innerHTML = '';
-            }
-
-            scanLog.prepend(logEntry);
-        }
-
-        // Start the scanner as soon as the page loads
-        html5QrCode.start(
-            { facingMode: "environment" }, // Use the rear camera
-            { fps: 10, qrbox: { width: 250, height: 250 } },
-            onScanSuccess,
-            (errorMessage) => { /* handle scan error */ }
-        ).catch(err => {
-            scannerStatus.textContent = 'Error starting scanner: ' + err;
-            console.error('Error starting scanner:', err);
-        });
     });
+
+    startScanBtn.addEventListener('click', startScanning);
+    stopScanBtn.addEventListener('click', stopScanning);
+});
 </script>
 
 <%- include('partials/footer') %>

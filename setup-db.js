@@ -68,6 +68,9 @@ async function setupDatabase() {
       await run(`ALTER TABLE payments ADD COLUMN payment_mode TEXT`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
       await run(`ALTER TABLE payments ADD COLUMN cash_paid REAL DEFAULT 0`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
       await run(`ALTER TABLE payments ADD COLUMN upi_paid REAL DEFAULT 0`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
+      await run(`ALTER TABLE payments ADD COLUMN remarks TEXT`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
+      await run(`ALTER TABLE material_stock ADD COLUMN event_session_id INTEGER REFERENCES event_sessions(id)`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
+      await run(`ALTER TABLE material_stock ADD COLUMN sequence INTEGER`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
       await run(`ALTER TABLE exhibition_details ADD COLUMN logo_path TEXT`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
       await run(`ALTER TABLE booking_edits ADD COLUMN rejection_reason TEXT`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
       await run(`ALTER TABLE booking_edits ADD COLUMN user_notified INTEGER DEFAULT 0`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
@@ -169,9 +172,24 @@ async function setupDatabase() {
         description TEXT,
         unique_id TEXT UNIQUE NOT NULL,
         qr_code_path TEXT,
+        sequence INTEGER,
         status TEXT DEFAULT 'Available' CHECK(status IN ('Available', 'Issued', 'Damaged')),
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        issued_to_client_id INTEGER REFERENCES clients(id)
+        issued_to_client_id INTEGER REFERENCES clients(id),
+        event_session_id INTEGER REFERENCES event_sessions(id)
+      )`);
+
+      await run(`CREATE TABLE IF NOT EXISTS material_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        material_id INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        user_id INTEGER,
+        username TEXT,
+        client_id INTEGER,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (material_id) REFERENCES material_stock(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        FOREIGN KEY (client_id) REFERENCES clients(id)
       )`);
 
       await run(`CREATE TABLE IF NOT EXISTS electric_items (
@@ -239,6 +257,7 @@ async function setupDatabase() {
     electric_paid REAL DEFAULT 0,
     material_paid REAL DEFAULT 0,
     shed_paid REAL DEFAULT 0,
+    remarks TEXT,
     event_session_id INTEGER REFERENCES event_sessions(id),
     FOREIGN KEY (booking_id) REFERENCES bookings(id)
   )`);
@@ -425,7 +444,7 @@ async function setupDatabase() {
       // --- Add event_session_id to all operational tables ---
       console.log('Adding event_session_id to operational tables...');
       const tablesToUpdate = [
-        'bookings', 'payments', 'material_issues', 'electric_bills', 'shed_bills', 'booking_staff',
+        'bookings', 'payments', 'material_issues', 'material_stock', 'electric_bills', 'shed_bills', 'booking_staff',
         'shed_allocations', 'accounting_transactions', 'logs'
       ];
       for (const table of tablesToUpdate) {

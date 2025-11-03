@@ -399,18 +399,38 @@ router.get('/booking-summary', async (req, res) => {
     const viewingSessionId = res.locals.viewingSession.id;
     const { q } = req.query;
     const sql = `
-      SELECT
-        b.id,
-        b.exhibitor_name,
-        s.name as space_name,
-        s.type as space_type,
-        b.rent_amount,
-        b.discount,
-        b.advance_amount,
-        b.due_amount,
-        b.form_submitted
+      SELECT 
+        b.id, 
+        b.exhibitor_name, 
+        s.name as space_name, 
+        s.type as space_type, 
+        b.rent_amount, 
+        b.discount, 
+        b.advance_amount, 
+        b.form_submitted,
+        -- Calculate total charges
+        (b.rent_amount - COALESCE(b.discount, 0)) AS total_charged,
+        -- Calculate total payments
+        (COALESCE(p.total_paid, 0) + COALESCE(b.advance_amount, 0)) AS total_paid,
+        -- Other charges
+        COALESCE(eb.total_electric_charge, 0) AS electric_charged,
+        COALESCE(mi.total_material_charge, 0) AS material_charged,
+        COALESCE(sh.total_shed_charge, 0) AS shed_charged
       FROM bookings b
       JOIN spaces s ON b.space_id = s.id
+      -- Aggregate Payments
+      LEFT JOIN (
+        SELECT booking_id, SUM(rent_paid + electric_paid + material_paid + shed_paid) as total_paid
+        FROM payments 
+        WHERE event_session_id = ?
+        GROUP BY booking_id
+      ) p ON b.id = p.booking_id
+      -- Aggregate Electric Bills
+      LEFT JOIN (SELECT booking_id, SUM(total_amount) as total_electric_charge FROM electric_bills WHERE event_session_id = ? GROUP BY booking_id) eb ON b.id = eb.booking_id
+      -- Aggregate Material Issues
+      LEFT JOIN (SELECT client_id, SUM(total_payable) as total_material_charge FROM material_issues WHERE event_session_id = ? GROUP BY client_id) mi ON b.client_id = mi.client_id
+      -- Aggregate Shed Charges
+      LEFT JOIN (SELECT booking_id, SUM(rent) as total_shed_charge FROM (SELECT sa.booking_id, s.rent FROM shed_allocations sa JOIN sheds s ON sa.shed_id = s.id WHERE sa.event_session_id = ? UNION ALL SELECT sb.booking_id, sb.amount as rent FROM shed_bills sb WHERE sb.event_session_id = ?) GROUP BY booking_id) sh ON b.id = sh.booking_id
     `;
 
     const whereClauses = ['b.event_session_id = ?'];
@@ -422,7 +442,16 @@ router.get('/booking-summary', async (req, res) => {
     }
 
     const fullSql = `${sql} WHERE ${whereClauses.join(' AND ')} ORDER BY s.type, s.name`;
-    const bookings = await all(fullSql, params);
+    const fullParams = [viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId, ...params];
+    const bookingsData = await all(fullSql, fullParams);
+
+    // Process the results to calculate the final due amount for each booking
+    const bookings = bookingsData.map(b => {
+      const totalCharged = (b.rent_amount || 0) - (b.discount || 0) + (b.electric_charged || 0) + (b.material_charged || 0) + (b.shed_charged || 0);
+      const totalPaid = (b.advance_amount || 0) + (b.total_paid || 0);
+      b.due_amount = totalCharged - totalPaid;
+      return b;
+    });
 
     res.render('bookingSummaryReport', {
       title: 'Booking Summary Report',
@@ -810,6 +839,171 @@ router.get('/material-issues', async (req, res) => {
   } catch (err) {
     console.error('Error generating material issues report:', err);
     res.status(500).send('Error generating report.');
+  }
+});
+
+// GET /report/allocated-materials - Show a summary of all materials issued via forms
+router.get('/allocated-materials', async (req, res) => {
+  try {
+    const viewingSessionId = res.locals.viewingSession.id;
+    const { q } = req.query;
+
+    let sql = `
+      SELECT 
+        mi.*,
+        c.name as client_name,
+        b.facia_name,
+        b.id as booking_id,
+        s.name as space_name
+      FROM material_issues mi
+      JOIN clients c ON mi.client_id = c.id
+      LEFT JOIN bookings b ON c.id = b.client_id AND b.event_session_id = mi.event_session_id AND b.booking_status = 'active'
+      LEFT JOIN spaces s ON b.space_id = s.id
+    `;
+
+    const whereClauses = ['mi.event_session_id = ?'];
+    const params = [viewingSessionId];
+
+    if (q) {
+      whereClauses.push('(c.name LIKE ? OR b.facia_name LIKE ? OR s.name LIKE ? OR mi.sl_no LIKE ?)');
+      params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+    }
+
+    sql += ` WHERE ${whereClauses.join(' AND ')} ORDER BY mi.issue_date DESC, mi.id DESC`;
+
+    const issues = await all(sql, params);
+
+    res.render('reportAllocatedMaterials', {
+      title: 'Allocated Materials Report',
+      issues,
+      filters: { q: q || '' }
+    });
+
+  } catch (err) {
+    console.error('Error generating allocated materials report:', err);
+    res.status(500).send('Error generating report.');
+  }
+});
+
+// GET /report/allocated-materials/csv - Download allocated materials as CSV
+router.get('/allocated-materials/csv', async (req, res) => {
+  try {
+    const viewingSessionId = res.locals.viewingSession.id;
+    const { q } = req.query;
+
+    let sql = `
+      SELECT 
+        mi.sl_no as "SL No",
+        mi.issue_date as "Date",
+        c.name as "Exhibitor",
+        b.facia_name as "Facia Name",
+        s.name as "Space",
+        (COALESCE(mi.plywood_free, 0) + COALESCE(mi.plywood_paid, 0)) as "Plywood",
+        (COALESCE(mi.table_free, 0) + COALESCE(mi.table_paid, 0)) as "Table",
+        (COALESCE(mi.chair_free, 0) + COALESCE(mi.chair_paid, 0)) as "Chair",
+        COALESCE(mi.rod_free, 0) as "Rod",
+        mi.table_numbers as "Table Numbers",
+        mi.chair_numbers as "Chair Numbers",
+        mi.notes as "Notes"
+      FROM material_issues mi
+      JOIN clients c ON mi.client_id = c.id
+      LEFT JOIN bookings b ON c.id = b.client_id AND b.event_session_id = mi.event_session_id AND b.booking_status = 'active'
+      LEFT JOIN spaces s ON b.space_id = s.id
+    `;
+
+    const whereClauses = ['mi.event_session_id = ?'];
+    const params = [viewingSessionId];
+
+    if (q) {
+      whereClauses.push('(c.name LIKE ? OR b.facia_name LIKE ? OR s.name LIKE ? OR mi.sl_no LIKE ?)');
+      params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+    }
+
+    sql += ` WHERE ${whereClauses.join(' AND ')} ORDER BY mi.issue_date DESC, mi.id DESC`;
+
+    const issues = await all(sql, params);
+
+    const json2csvParser = new Parser();
+    const csv = json2csvParser.parse(issues);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="allocated-materials-report.csv"');
+    res.status(200).send(csv);
+
+  } catch (err) {
+    console.error('Error generating allocated materials CSV:', err);
+    res.status(500).send('Error generating CSV.');
+  }
+});
+
+// GET /report/damaged-materials - Show a list of all materials marked as damaged
+router.get('/damaged-materials', async (req, res) => {
+  try {
+    const viewingSessionId = res.locals.viewingSession.id;
+    const { q } = req.query;
+
+    let sql = `
+      SELECT 
+        name,
+        unique_id,
+        description,
+        created_at
+      FROM material_stock
+    `;
+    const whereClauses = ["status = 'Damaged'", "event_session_id = ?"];
+    const params = [viewingSessionId];
+
+    if (q) {
+      whereClauses.push('(name LIKE ? OR unique_id LIKE ?)');
+      params.push(`%${q}%`, `%${q}%`);
+    }
+
+    sql += ` WHERE ${whereClauses.join(' AND ')} ORDER BY name, id`;
+
+    const materials = await all(sql, params);
+    res.render('reportDamagedMaterials', { title: 'Damaged Materials Report', materials, filters: { q: q || '' } });
+  } catch (err) {
+    console.error('Error generating damaged materials report:', err);
+    res.status(500).send('Error generating report.');
+  }
+});
+
+// GET /report/damaged-materials/csv - Download damaged materials as CSV
+router.get('/damaged-materials/csv', async (req, res) => {
+  try {
+    const viewingSessionId = res.locals.viewingSession.id;
+    const { q } = req.query;
+
+    let sql = `
+      SELECT 
+        name as "Name",
+        unique_id as "Unique ID",
+        description as "Description",
+        created_at as "Date Added"
+      FROM material_stock
+    `;
+    const whereClauses = ["status = 'Damaged'", "event_session_id = ?"];
+    const params = [viewingSessionId];
+
+    if (q) {
+      whereClauses.push('(name LIKE ? OR unique_id LIKE ?)');
+      params.push(`%${q}%`, `%${q}%`);
+    }
+
+    sql += ` WHERE ${whereClauses.join(' AND ')} ORDER BY name, id`;
+
+    const materials = await all(sql, params);
+
+    const json2csvParser = new Parser();
+    const csv = json2csvParser.parse(materials);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="damaged-materials-report.csv"');
+    res.status(200).send(csv);
+
+  } catch (err) {
+    console.error('Error generating damaged materials CSV:', err);
+    res.status(500).send('Error generating CSV.');
   }
 });
 

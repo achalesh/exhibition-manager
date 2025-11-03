@@ -31,7 +31,7 @@ router.get('/add', async (req, res) => {
     // Fetch bookings and next receipt number in parallel
     const [bookings, lastReceipt] = await Promise.all([
       all(`
-        SELECT b.id, b.exhibitor_name, b.facia_name, s.name as space_name 
+        SELECT b.id, b.exhibitor_name, b.facia_name, s.name as space_name, (b.exhibitor_name || ' (' || s.name || ')') as display_name
         FROM bookings b
         JOIN spaces s ON b.space_id = s.id
         WHERE b.event_session_id = ? AND b.booking_status = 'active'
@@ -99,7 +99,7 @@ router.get('/details/:booking_id', async (req, res) => {
 
 // POST: Record a new payment
 router.post('/add', async (req, res) => {
-  const { booking_id, receipt_number, payment_date, payment_type, cash_paid, upi_paid } = req.body;
+  const { booking_id, receipt_number, payment_date, payment_type, cash_paid, upi_paid, remarks } = req.body;
 
   if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
     req.session.flash = { type: 'warning', message: 'Cannot add payments to an archived session.' };
@@ -132,8 +132,14 @@ router.post('/add', async (req, res) => {
     let newPaymentId;
     await transaction(async (db) => {
         // 1. Insert the detailed payment record
-        const paymentSql = `INSERT INTO payments (booking_id, receipt_number, payment_date, payment_mode, cash_paid, upi_paid, ${targetCol}, event_session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-        const { lastID: paymentId } = await db.run(paymentSql, [booking_id, receipt_number, payment_date, payment_mode, cashAmount, upiAmount, totalPaid, activeSessionId]);
+        const finalReceiptNumber = payment_type === 'rent' ? receipt_number : 'NA';
+
+        const paymentSql = `INSERT INTO payments (booking_id, receipt_number, payment_date, payment_mode, cash_paid, upi_paid, ${targetCol}, event_session_id, remarks) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        const { lastID: paymentId } = await db.run(paymentSql, [
+            booking_id, finalReceiptNumber, payment_date, 
+            payment_mode, cashAmount, upiAmount, 
+            totalPaid, activeSessionId, remarks
+        ]);
         newPaymentId = paymentId; // Capture the new ID
 
         // 2. Update the master due_amount on the bookings table
@@ -196,7 +202,7 @@ router.get('/edit/:id', async (req, res) => {
 // POST: Update a payment
 router.post('/edit/:id', async (req, res) => {
   const paymentId = req.params.id;
-  const { receipt_number, payment_date, cash_paid, upi_paid } = req.body;
+  const { receipt_number, payment_date, cash_paid, upi_paid, remarks } = req.body;
   const newCashAmount = parseFloat(cash_paid) || 0;
   const newUpiAmount = parseFloat(upi_paid) || 0;
   const newTotalAmount = newCashAmount + newUpiAmount;
@@ -224,7 +230,10 @@ router.post('/edit/:id', async (req, res) => {
           let targetCol = '';
           if (oldPayment.rent_paid > 0) targetCol = 'rent_paid'; else if (oldPayment.electric_paid > 0) targetCol = 'electric_paid'; else if (oldPayment.material_paid > 0) targetCol = 'material_paid'; else if (oldPayment.shed_paid > 0) targetCol = 'shed_paid';
           if (!targetCol) throw new Error('Could not determine payment type for old payment.');
-          await db.run(`UPDATE payments SET receipt_number = ?, payment_date = ?, payment_mode = ?, cash_paid = ?, upi_paid = ?, ${targetCol} = ? WHERE id = ?`, [receipt_number, payment_date, newPaymentMode, newCashAmount, newUpiAmount, newTotalAmount, paymentId]);
+          await db.run(
+            `UPDATE payments SET receipt_number = ?, payment_date = ?, payment_mode = ?, cash_paid = ?, upi_paid = ?, ${targetCol} = ?, remarks = ? WHERE id = ?`, 
+            [receipt_number, payment_date, newPaymentMode, newCashAmount, newUpiAmount, newTotalAmount, remarks, paymentId]
+          );
           await db.run('UPDATE bookings SET due_amount = due_amount + ? WHERE id = ?', [amountDifference, oldPayment.booking_id]);
           await db.run('UPDATE accounting_transactions SET amount = ?, transaction_date = ? WHERE payment_id = ?', [newTotalAmount, payment_date, paymentId]);
       });

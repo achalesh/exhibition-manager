@@ -1,0 +1,27 @@
+<% if (pagination && pagination.totalPages > 1) { %>
+  <nav aria-label="Page navigation">
+    <ul class="pagination justify-content-center">
+      <li class="page-item <%= !pagination.hasPrevPage ? 'disabled' : '' %>">
+        <a class="page-link" href="?page=<%= pagination.currentPage - 1 %>&q=<%= filters.q %>&status=<%= filters.status %>" aria-label="Previous">
+          <span aria-hidden="true">&laquo;</span>
+        </a>
+      </li>
+
+      <% for (let i = 1; i <= pagination.totalPages; i++) { %>
+        <% if (i === pagination.currentPage || (i >= pagination.currentPage - 2 && i <= pagination.currentPage + 2) || i === 1 || i === pagination.totalPages) { %>
+          <li class="page-item <%= i === pagination.currentPage ? 'active' : '' %>">
+            <a class="page-link" href="?page=<%= i %>&q=<%= filters.q %>&status=<%= filters.status %>"><%= i %></a>
+          </li>
+        <% } else if (i === pagination.currentPage - 3 || i === pagination.currentPage + 3) { %>
+          <li class="page-item disabled"><span class="page-link">...</span></li>
+        <% } %>
+      <% } %>
+
+      <li class="page-item <%= !pagination.hasNextPage ? 'disabled' : '' %>">
+        <a class="page-link" href="?page=<%= pagination.currentPage + 1 %>&q=<%= filters.q %>&status=<%= filters.status %>" aria-label="Next">
+          <span aria-hidden="true">&raquo;</span>
+        </a>
+      </li>
+    </ul>
+  </nav>
+<% } %>

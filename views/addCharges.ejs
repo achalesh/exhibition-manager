@@ -1,172 +1,211 @@
 <%- include('partials/header') %>
 
 <div class="container mt-4">
-    <div class="row">
-        <!-- Payment Form -->
-        <div class="col-lg-7">
-            <div class="card shadow-sm">
-                <div class="card-header">
-                    <h4 class="mb-0"><%= title %></h4>
-                </div>
-                <div class="card-body">
-                    <form action="/charges/add" method="POST" id="payment-form">
-                        <div class="mb-3">
-                            <label for="booking_id" class="form-label">Exhibitor</label>
-                            <select id="booking_id" name="booking_id" class="form-select" required autofocus>
-                                <option value="">-- Select Exhibitor --</option>
-                                <% bookings.forEach(booking => { %>
-                                    <option value="<%= booking.id %>" <%= selectedBookingId == booking.id ? 'selected' : '' %>>
-                                        <%= booking.exhibitor_name %> (<%= booking.space_name %>)
-                                    </option>
-                                <% }) %>
-                            </select>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="payment_type" class="form-label">Payment For</label>
-                            <select id="payment_type" name="payment_type" class="form-select" required>
-                                <option value="rent">Rent</option>
-                                <option value="electric">Electric</option>
-                                <option value="material">Material</option>
-                                <option value="shed">Shed</option>
-                            </select>
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-6 mb-3" id="receipt-number-group">
-                                <label for="receipt_number" class="form-label">Receipt Number</label>
-                                <input type="text" id="receipt_number" name="receipt_number" class="form-control" value="<%= nextReceiptNumber %>" required>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label for="payment_date" class="form-label">Payment Date</label>
-                                <input type="date" id="payment_date" name="payment_date" class="form-control" value="<%= new Date().toISOString().split('T')[0] %>" required>
-                            </div>
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="cash_paid" class="form-label">Cash Amount</label>
-                                <input type="number" step="0.01" id="cash_paid" name="cash_paid" class="form-control" value="0">
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label for="upi_paid" class="form-label">UPI/Digital Amount</label>
-                                <input type="number" step="0.01" id="upi_paid" name="upi_paid" class="form-control" value="0">
-                            </div>
-                        </div>
-
-                        <button type="submit" class="btn btn-primary w-100">Submit Payment</button>
-                    </form>
-                </div>
-            </div>
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="card shadow-sm" style="width: 120%;">
+        <div class="card-header bg-primary text-white">
+          <h4 class="mb-0"><%= title %></h4>
         </div>
-
-        <!-- Last Payment Details -->
-        <div class="col-lg-5">
-            <!-- Due Details Card (now on top) -->
-            <div class="card shadow-sm mb-3" id="due-details-card" style="display: none;">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-hourglass-split me-2"></i>Outstanding Dues</h5>
-                </div>
-                <div class="card-body" id="due-details-body">
-                    <!-- Dues will be populated here by JavaScript -->
-                </div>
+        <div class="card-body">
+          <% if (lastPaymentDetails) { %>
+            <div class="alert alert-success" role="alert">
+              <h5 class="alert-heading">Payment Successful!</h5>
+              <p>
+                Successfully recorded a payment of <strong>₹<%= lastPaymentDetails.total_paid.toFixed(2) %></strong>
+                for <strong><%= lastPaymentDetails.exhibitor_name %></strong>
+                (Receipt #<%= lastPaymentDetails.receipt_number %>) for <strong><%= lastPaymentDetails.payment_category %></strong>.
+              </p>
+              <hr>
+              <a href="/charges/receipt/<%= lastPaymentDetails.id %>" target="_blank" class="btn btn-sm btn-light">
+                <i class="bi bi-printer"></i> Print Last Receipt
+              </a>
             </div>
+          <% } %>
 
-            <% if (lastPaymentDetails) { %>
-                <div class="card border-success shadow-sm" id="last-payment-card">
-                    <div class="card-header bg-success text-white">
-                        <h5 class="mb-0"><i class="bi bi-check-circle-fill me-2"></i>Payment Recorded</h5>
-                    </div>
-                    <div class="card-body">
-                        <p><strong>Exhibitor:</strong> <%= lastPaymentDetails.exhibitor_name %></p>
-                        <p><strong>Receipt No:</strong> <%= lastPaymentDetails.receipt_number %></p>
-                        <p><strong>Date:</strong> <%= new Date(lastPaymentDetails.payment_date).toLocaleDateString() %></p>
-                        <p><strong>For:</strong> <%= lastPaymentDetails.payment_category %></p>
-                        <p class="fs-4 fw-bold">Total Paid: ₹<%= (lastPaymentDetails.total_paid).toFixed(2) %></p>
-                        <a href="/charges/receipt/<%= lastPaymentDetails.id %>" class="btn btn-outline-primary w-100" target="_blank">
-                            <i class="bi bi-printer me-2"></i>Print Receipt
-                        </a>
-                    </div>
+          <form action="/charges/add" method="POST" id="payment-form">
+            <div class="row">
+              <!-- Left Column: Form Fields -->
+              <div class="col-md-7">
+                <!-- Exhibitor Selection -->
+                <div class="mb-3">
+                  <label for="booking_id" class="form-label">Exhibitor</label>
+                  <select class="form-select" id="booking_id" name="booking_id" required autofocus>
+                    <option value="" disabled <%= !selectedBookingId ? 'selected' : '' %>>-- Select an Exhibitor --</option>
+                    <% bookings.forEach(booking => { %>
+                      <option 
+                        value="<%= booking.id %>" 
+                        data-facia="<%= booking.facia_name || 'N/A' %>"
+                        <%= selectedBookingId == booking.id ? 'selected' : '' %>>
+                        <%= booking.display_name %>
+                      </option>
+                    <% }) %>
+                  </select>
+                  <div id="facia-name-display" class="form-text mt-2" style="display: none;">
+                    <strong>Facia Name:</strong> <span id="facia-name-text"></span>
+                  </div>
                 </div>
-            <% } %>
 
-            <div class="alert alert-info" id="due-details-placeholder" style="<%= lastPaymentDetails ? 'display: none;' : 'display: block;' %>">
-                Select an exhibitor to view their due amounts.
+                <!-- Payment Type -->
+                <div class="mb-3">
+                  <label for="payment_type" class="form-label">Payment For</label>
+                  <select class="form-select" id="payment_type" name="payment_type" required>
+                    <option value="rent">Rent</option>
+                    <option value="electric">Electric</option>
+                    <option value="material">Material</option>
+                    <option value="shed">Shed</option>
+                  </select>
+                </div>
+
+                <!-- Payment Details -->
+                <div class="row">
+                  <div class="col-md-6 mb-3">
+                    <label for="receipt_number" class="form-label">Receipt Number</label>
+                    <input type="text" class="form-control" id="receipt_number" name="receipt_number" value="<%= nextReceiptNumber %>" required>
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label for="payment_date" class="form-label">Payment Date</label>
+                    <input type="date" class="form-control" id="payment_date" name="payment_date" value="<%= new Date().toISOString().split('T')[0] %>" required>
+                  </div>
+                </div>
+
+                <!-- Payment Amount -->
+                <div class="row">
+                  <div class="col-md-6 mb-3">
+                    <label for="cash_paid" class="form-label">Cash Amount (₹)</label>
+                    <input type="number" class="form-control" id="cash_paid" name="cash_paid" step="0.01" min="0" placeholder="0.00">
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label for="upi_paid" class="form-label">UPI/Online Amount (₹)</label>
+                    <input type="number" class="form-control" id="upi_paid" name="upi_paid" step="0.01" min="0" placeholder="0.00">
+                  </div>
+                </div>
+
+                <!-- Remarks -->
+                <div class="mb-3">
+                  <label for="remarks" class="form-label">Remarks</label>
+                  <textarea class="form-control" id="remarks" name="remarks" rows="2" placeholder="Optional notes about the payment..."></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100">
+                  <i class="bi bi-check-circle-fill me-2"></i>Record Payment
+                </button>
+              </div>
+
+              <!-- Right Column: Due Summary -->
+              <div class="col-md-5">
+                <div id="due-summary-card" class="card" style="display: none;">
+                  <div class="card-header bg-light">
+                    <h6 class="mb-0">Due Summary</h6>
+                  </div>
+                  <div class="card-body p-3">
+                    <ul class="list-group list-group-flush" id="due-details-list">
+                      <!-- Due details will be populated here by JavaScript -->
+                    </ul>
+                    <div class="list-group-item list-group-item-dark fw-bold d-flex justify-content-between align-items-center">
+                      Total Due
+                      <span id="total-due-amount"></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
+          </form>
         </div>
+      </div>
     </div>
+  </div>
 </div>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const bookingSelect = document.getElementById('booking_id');
-        const paymentTypeSelect = document.getElementById('payment_type');
-        const receiptGroup = document.getElementById('receipt-number-group');
+  document.addEventListener('DOMContentLoaded', function() {
+    const bookingSelect = document.getElementById('booking_id');
+    const faciaDisplay = document.getElementById('facia-name-display');
+    const faciaText = document.getElementById('facia-name-text');
+    const dueSummaryCard = document.getElementById('due-summary-card');
+    const dueDetailsList = document.getElementById('due-details-list');
+    const totalDueAmount = document.getElementById('total-due-amount');
+    const paymentTypeSelect = document.getElementById('payment_type');
+    const receiptNumberInput = document.getElementById('receipt_number');
+    const nextReceiptNumber = '<%= nextReceiptNumber %>';
+
+    // Helper to format currency
+    const formatCurrency = (num) => `₹${(num || 0).toFixed(2)}`;
+
+    function handlePaymentTypeChange() {
+      const selectedType = paymentTypeSelect.value;
+      if (selectedType === 'rent') {
+        receiptNumberInput.disabled = false;
+        receiptNumberInput.required = true;
+        receiptNumberInput.value = nextReceiptNumber;
+      } else {
+        receiptNumberInput.disabled = true;
+        receiptNumberInput.required = false;
+        receiptNumberInput.value = 'NA';
+      }
+    }
+
+    async function updateExhibitorDetails() {
+      const selectedOption = bookingSelect.options[bookingSelect.selectedIndex];
+      const bookingId = selectedOption.value;
+      const faciaName = selectedOption.dataset.facia;
+
+      // Update Facia Name
+      if (faciaName && faciaName !== 'N/A') {
+        faciaText.textContent = faciaName;
+        faciaDisplay.style.display = 'block';
+      } else {
+        faciaDisplay.style.display = 'none';
+      }
+
+      // Fetch and Update Due Summary
+      if (!bookingId) {
+        dueSummaryCard.style.display = 'none';
+        return;
+      }
+
+      try {
+        const response = await fetch(`/charges/details/${bookingId}`);
+        if (!response.ok) throw new Error('Failed to fetch due details.');
         
-        // Right-side card elements
-        const dueDetailsCard = document.getElementById('due-details-card');
-        const dueDetailsBody = document.getElementById('due-details-body');
-        const dueDetailsPlaceholder = document.getElementById('due-details-placeholder');
+        const dues = await response.json();
 
-        async function fetchDueDetails(bookingId) {
-            if (!bookingId) {
-                if(dueDetailsCard) dueDetailsCard.style.display = 'none';
-                if(dueDetailsPlaceholder) dueDetailsPlaceholder.style.display = 'block';
-                return;
-            }
-            try {
-                const response = await fetch(`/charges/details/${bookingId}`);
-                if (!response.ok) {
-                    dueDetailsBody.innerHTML = '<p class="text-danger">Could not fetch due details.</p>';
-                    dueDetailsCard.style.display = 'block';
-                    return;
-                }
-                const data = await response.json();
-                
-                let content = '<ul class="list-group list-group-flush">';
-                content += `<li>Rent: <span class="fw-bold">₹${data.rent_due.toFixed(2)}</span></li>`;
-                content += `<li>Electric: <span class="fw-bold">₹${data.electric_due.toFixed(2)}</span></li>`;
-                content += `<li>Material: <span class="fw-bold">₹${data.material_due.toFixed(2)}</span></li>`;
-                content += `<li>Shed: <span class="fw-bold">₹${data.shed_due.toFixed(2)}</span></li>`;
-                content += `<li class="list-group-item d-flex justify-content-between align-items-center active mt-2"><strong>Total Due:</strong> <span class="badge bg-danger rounded-pill fs-6">₹${data.total_due.toFixed(2)}</span></li>`;
-                content += '</ul>';
+        dueDetailsList.innerHTML = `
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            Rent Due <span class="badge bg-primary rounded-pill">${formatCurrency(dues.rent_due)}</span>
+          </li>
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            Electric Due <span class="badge bg-warning text-dark rounded-pill">${formatCurrency(dues.electric_due)}</span>
+          </li>
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            Material Due <span class="badge bg-info text-dark rounded-pill">${formatCurrency(dues.material_due)}</span>
+          </li>
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            Shed Due <span class="badge bg-secondary rounded-pill">${formatCurrency(dues.shed_due)}</span>
+          </li>
+        `;
+        totalDueAmount.textContent = formatCurrency(dues.total_due);
+        totalDueAmount.className = dues.total_due > 0 ? 'text-danger' : 'text-success';
 
-                if(dueDetailsBody) dueDetailsBody.innerHTML = content;
-                if(dueDetailsCard) dueDetailsCard.style.display = 'block';
-                if(dueDetailsPlaceholder) dueDetailsPlaceholder.style.display = 'none';
-            } catch (error) {
-                console.error('Error fetching due details:', error);
-                if(dueDetailsBody) dueDetailsBody.innerHTML = '<p class="text-danger">Error loading details.</p>';
-                if(dueDetailsCard) dueDetailsCard.style.display = 'block';
-                if(dueDetailsPlaceholder) dueDetailsPlaceholder.style.display = 'none';
-            }
-        }
+        dueSummaryCard.style.display = 'block';
+      } catch (error) {
+        console.error('Error fetching due details:', error);
+        dueSummaryCard.style.display = 'none';
+      }
+    }
 
-        bookingSelect.addEventListener('change', function() {
-            fetchDueDetails(this.value);
-        });
+    // Update on change
+    paymentTypeSelect.addEventListener('change', handlePaymentTypeChange);
+    bookingSelect.addEventListener('change', updateExhibitorDetails);
 
-        function toggleReceiptField() {
-            const receiptInput = document.getElementById('receipt_number');
-            if (paymentTypeSelect.value === 'rent') {
-                receiptGroup.style.display = 'block';
-                receiptInput.required = true;
-                receiptInput.value = '<%= nextReceiptNumber %>'; // Restore suggested number
-            } else {
-                receiptGroup.style.display = 'none';
-                receiptInput.required = false;
-                receiptInput.value = '0'; // Set to 0 for non-rent payments
-            }
-        }
+    // Also run on page load in case a booking is pre-selected
+    if (bookingSelect.value) {
+      updateExhibitorDetails();
+    }
 
-        paymentTypeSelect.addEventListener('change', toggleReceiptField);
-        toggleReceiptField(); // Initial check on page load
-
-        // Fetch details on page load if a booking is pre-selected
-        if (bookingSelect.value) {
-            fetchDueDetails(bookingSelect.value);
-        }
-    });
+    // Set initial state for receipt number field
+    handlePaymentTypeChange();
+  });
 </script>
 
 <%- include('partials/footer') %>

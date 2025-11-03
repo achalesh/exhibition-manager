@@ -115,37 +115,52 @@ router.post('/add', async (req, res) => {
 // GET: Booking list
 router.get('/list', async (req, res) => {
   const viewingSessionId = res.locals.viewingSession.id;
-  const filter = req.query.form_status || 'all';
+  const { form_status = 'all', q } = req.query;
   const whereClauses = ['b.event_session_id = ?'];
   const params = [viewingSessionId];
 
-  if (filter === 'submitted') {
+  if (q) {
+    whereClauses.push('(b.exhibitor_name LIKE ? OR b.facia_name LIKE ? OR s.name LIKE ?)');
+    const searchTerm = `%${q}%`;
+    params.push(searchTerm, searchTerm, searchTerm);
+  }
+
+  if (form_status === 'submitted') {
     whereClauses.push('b.form_submitted = 1');
-  } else if (filter === 'not_submitted') {
+  } else if (form_status === 'not_submitted') {
     whereClauses.push('b.form_submitted = 0');
   }
 
+  // Simplified query to fetch booking list without calculating due amounts.
   const sql = `
-    SELECT b.id, b.exhibitor_name AS client_name, b.facia_name, s.name AS space_name, s.size as space_size, s.type as space_type,
-           b.rent_amount, b.discount, b.due_amount, b.form_submitted
+    SELECT
+      b.id,
+      b.exhibitor_name AS client_name,
+      b.facia_name,
+      b.contact_number,
+      b.secondary_number,
+      s.name AS space_name,
+      s.size as space_size,
+      s.type as space_type,
+      b.form_submitted
     FROM bookings b
     JOIN spaces s ON b.space_id = s.id
     WHERE ${whereClauses.join(' AND ')}
     ORDER BY
-      CASE s.type
-        WHEN 'Pavilion' THEN 1
-        WHEN 'Stall' THEN 2
-        WHEN 'Booth' THEN 3
-        ELSE 4
-      END,
-      s.name
+      CASE s.type WHEN 'Pavilion' THEN 1 WHEN 'Stall' THEN 2 WHEN 'Booth' THEN 3 ELSE 4 END, s.name
   `;
   try {
     const bookings = await all(sql, params);
-    res.render('bookings', { title: 'View Bookings', bookings, currentFilter: filter, message: req.query.message });
+    res.render('bookings', { 
+      title: 'View Bookings', 
+      bookings, 
+      currentFilter: form_status, 
+      filters: { q: q || '' },
+      message: req.query.message 
+    });
   } catch (err) {
     console.error("Error fetching bookings:", err.message);
-    res.render('bookings', { title: 'View Bookings', bookings: [], currentFilter: filter, message: null });
+    res.render('bookings', { title: 'View Bookings', bookings: [], currentFilter: form_status, filters: { q: q || '' }, message: null });
   }
 });
 
@@ -246,7 +261,8 @@ router.get('/details-full/:id', async (req, res) => {
         payment_date: p.payment_date,
         receipt_number: p.receipt_number,
         type,
-        amount
+        amount,
+        remarks: p.remarks
       };
     });
 

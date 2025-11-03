@@ -1,141 +1,123 @@
 <%- include('partials/header') %>
 
 <div class="container mt-4">
-    <div class="card mx-auto" style="max-width: 800px;">
-        <div class="card-header">
-            <h3><%= title %></h3>
+  <div class="row justify-content-center">
+    <div class="col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+          <h4 class="mb-0"><%= title %></h4>
         </div>
         <div class="card-body">
-            <div class="row">
-                <!-- Left side: Scanner and Client Selection -->
-                <div class="col-md-6">
-                    <div class="mb-3">
-                        <label for="client-select" class="form-label"><strong>1. Select Client to Issue Materials To:</strong></label>
-                        <select id="client-select" class="form-select">
-                            <option value="">-- Please select a client --</option>
-                            <% clients.forEach(client => { %>
-                                <option value="<%= client.id %>"><%= client.name %> (<%= client.space_name %>)</option>
-                            <% }) %>
-                        </select>
-                    </div>
+          <p class="text-muted">Select a client, then scan a material's QR code or enter its Unique ID to issue the item.</p>
 
-                    <div id="scanner-container" class="border rounded bg-light" style="width: 100%; min-height: 300px;">
-                        <!-- The QR Code scanner will be rendered here -->
-                    </div>
-                    <div id="scanner-status" class="form-text mt-2">Please select a client to start scanning.</div>
+          <!-- Client Selection -->
+          <div class="mb-3">
+            <label for="clientId" class="form-label">Client / Exhibitor</label>
+            <select id="clientId" class="form-select" required>
+              <option value="" disabled selected>-- Select a Client --</option>
+              <% clients.forEach(client => { %>
+                <option value="<%= client.id %>"><%= client.name %> (<%= client.space_name %>)</option>
+              <% }) %>
+            </select>
+          </div>
 
-                    <div class="mt-4">
-                        <h5><strong>Or, Enter Manually:</strong></h5>
-                        <form id="manual-issue-form">
-                            <div class="input-group">
-                                <input type="text" id="manual-unique-id" class="form-control" placeholder="Enter Material Unique ID">
-                                <button class="btn btn-outline-secondary" type="submit">Issue Item</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+          <!-- QR Code Scanner Section -->
+          <div id="reader" style="width: 100%;" class="mb-3"></div>
+          <button id="start-scan-btn" class="btn btn-outline-primary w-100 mb-3"><i class="bi bi-qr-code-scan me-2"></i>Start Camera Scan</button>
+          <button id="stop-scan-btn" class="btn btn-outline-secondary w-100 mb-3" style="display: none;"><i class="bi bi-camera-video-off me-2"></i>Stop Scanning</button>
 
-                <!-- Right side: Scan Log -->
-                <div class="col-md-6">
-                    <h5><strong>Scan Log</strong></h5>
-                    <div id="scan-log" class="border rounded p-2" style="height: 400px; overflow-y: auto; background-color: #f8f9fa;">
-                        <p class="text-muted">Scanned items will appear here...</p>
-                    </div>
-                </div>
-            </div>
+          <hr>
+
+          <!-- Manual Entry -->
+          <div class="mb-3">
+            <label for="uniqueId" class="form-label">Material Unique ID</label>
+            <input type="text" class="form-control" id="uniqueId" placeholder="e.g., NCF/T/BLR/0001" autofocus>
+          </div>
+
+          <div class="d-grid">
+            <button id="issue-btn" class="btn btn-success"><i class="bi bi-box-arrow-up-right me-2"></i>Issue Material</button>
+          </div>
+
+          <div id="result-message" class="mt-4"></div>
         </div>
+      </div>
     </div>
+  </div>
 </div>
 
-<!-- Include the QR Code scanning library -->
-<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<!-- QR Scanner Library -->
+<script src="https://unpkg.com/html5-qrcode/html5-qrcode.min.js"></script>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const clientSelect = document.getElementById('client-select');
-        const scannerStatus = document.getElementById('scanner-status');
-        const scanLog = document.getElementById('scan-log');
-        const manualForm = document.getElementById('manual-issue-form');
-        const manualInput = document.getElementById('manual-unique-id');
-        let html5QrCode;
+document.addEventListener('DOMContentLoaded', function() {
+    const clientIdSelect = document.getElementById('clientId');
+    const uniqueIdInput = document.getElementById('uniqueId');
+    const issueBtn = document.getElementById('issue-btn');
+    const resultMessage = document.getElementById('result-message');
+    const startScanBtn = document.getElementById('start-scan-btn');
+    const stopScanBtn = document.getElementById('stop-scan-btn');
+    const readerDiv = document.getElementById('reader');
 
-        // Refactored function to handle the API call for issuing an item
-        function issueItem(uniqueId) {
-            const clientId = clientSelect.value;
-            if (!clientId) {
-                logMessage('Please select a client first.', 'danger');
-                return Promise.reject('No client selected');
-            }
+    async function handleIssue() {
+        const uniqueId = uniqueIdInput.value.trim();
+        const clientId = clientIdSelect.value;
 
-            return fetch('/materials/api/issue-item', {
+        if (!clientId) return showMessage('Please select a client.', 'warning');
+        if (!uniqueId) return showMessage('Please enter or scan a Unique ID.', 'warning');
+
+        issueBtn.disabled = true;
+
+        try {
+            const response = await fetch('/materials/api/issue-item', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ uniqueId: uniqueId, clientId: clientId })
-            })
-            .then(response => response.json())
-            .then(data => {
-                logMessage(data.message, data.success ? 'success' : 'danger');
-            })
-            .catch(err => {
-                logMessage('An error occurred. Please check the console.', 'danger');
-                console.error(err);
+                body: JSON.stringify({ uniqueId, clientId }),
             });
+            const result = await response.json();
+            showMessage(result.message, result.success ? 'success' : 'danger');
+            if (result.success) uniqueIdInput.value = '';
+        } catch (error) {
+            showMessage('A network error occurred. Please try again.', 'danger');
+        } finally {
+            issueBtn.disabled = false;
+            uniqueIdInput.focus();
         }
+    }
 
-        function onScanSuccess(decodedText, decodedResult) {
-            if (!clientSelect.value) {
-                logMessage('Please select a client before scanning.', 'danger');
-                return;
-            }
+    function showMessage(message, type) {
+        resultMessage.innerHTML = `<div class="alert alert-${type}" role="alert">${message}</div>`;
+        setTimeout(() => { resultMessage.innerHTML = ''; }, 5000);
+    }
 
-            // Temporarily pause the scanner
-            html5QrCode.pause(true);
-            
-            issueItem(decodedText).finally(() => {
-                // Resume scanning after a short delay
-                setTimeout(() => html5QrCode.resume(), 1500);
-            });
-        }
+    const html5QrCode = new Html5Qrcode("reader");
+    const qrCodeSuccessCallback = (decodedText, decodedResult) => {
+        uniqueIdInput.value = decodedText;
+        stopScanning();
+        handleIssue(); // Automatically issue after a successful scan
+    };
+    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
 
-        function logMessage(message, type) {
-            const logEntry = document.createElement('div');
-            logEntry.className = `alert alert-${type} py-1 px-2 mb-1`;
-            logEntry.textContent = message;
-            
-            // If the log is empty, clear the placeholder text
-            if (scanLog.querySelector('p.text-muted')) {
-                scanLog.innerHTML = '';
-            }
+    function startScanning() {
+        html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback)
+            .then(() => {
+                startScanBtn.style.display = 'none';
+                stopScanBtn.style.display = 'block';
+                readerDiv.style.border = '1px solid #dee2e6';
+            }).catch(err => showMessage('Could not start camera. Please grant permission.', 'danger'));
+    }
 
-            scanLog.prepend(logEntry);
-        }
+    function stopScanning() {
+        html5QrCode.stop().then(() => {
+            startScanBtn.style.display = 'block';
+            stopScanBtn.style.display = 'none';
+            readerDiv.style.border = 'none';
+        }).catch(err => {});
+    }
 
-        manualForm.addEventListener('submit', function(event) {
-            event.preventDefault();
-            const uniqueId = manualInput.value.trim();
-            if (uniqueId) {
-                issueItem(uniqueId);
-                manualInput.value = ''; // Clear input after submission
-            }
-        }
-
-        clientSelect.addEventListener('change', () => {
-            if (clientSelect.value) {
-                scannerStatus.textContent = 'Scanner is active. Position a QR code in the frame.';
-                if (!html5QrCode) {
-                    html5QrCode = new Html5Qrcode("scanner-container");
-                    html5QrCode.start(
-                        { facingMode: "environment" }, // Use the rear camera
-                        { fps: 10, qrbox: { width: 250, height: 250 } },
-                        onScanSuccess,
-                        (errorMessage) => { /* handle scan error */ }
-                    ).catch(err => {
-                        scannerStatus.textContent = 'Error starting scanner: ' + err;
-                    });
-                }
-            }
-        });
-    });
+    issueBtn.addEventListener('click', handleIssue);
+    startScanBtn.addEventListener('click', startScanning);
+    stopScanBtn.addEventListener('click', stopScanning);
+});
 </script>
 
 <%- include('partials/footer') %>
