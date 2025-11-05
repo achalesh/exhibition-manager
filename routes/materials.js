@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { all, get, run, logAction } = require('../db-helpers');
+const { all, get, run, logAction, transaction } = require('../db-helpers');
 const qrcode = require('qrcode');
 const path = require('path');
 const multer = require('multer');
@@ -293,6 +293,7 @@ router.post('/update-status/:id', async (req, res) => {
 // GET: Show page to issue materials by scanning QR codes
 router.get('/issue', async (req, res) => {
     try {
+        const selectedClientId = req.query.client_id || null;
         // Fetch clients who have active bookings to populate the dropdown
         const clients = await all(`
             SELECT c.id, c.name, s.name as space_name
@@ -305,7 +306,8 @@ router.get('/issue', async (req, res) => {
 
         res.render('issueMaterialByScan', {
             title: 'Issue Materials by QR Scan',
-            clients: clients || []
+            clients: clients || [],
+            selectedClientId
         });
     } catch (err) {
         console.error('Error loading material issue page:', err.message);
@@ -332,11 +334,87 @@ router.post('/api/issue-item', async (req, res) => {
             return res.status(409).json({ success: false, message: `Material "${material.name}" is already ${material.status}.` });
         }
 
-        // Update the material's status and assign it to the client
-        await run("UPDATE material_stock SET status = 'Issued', issued_to_client_id = ? WHERE id = ?", [clientId, material.id]);
+        // --- Smart Billing Logic for Tables and Chairs ---
+        let isPaidItem = false;
+        let itemCost = 0;
+        const itemName = material.name.toLowerCase();
 
-        // Log the action in the history table
-        await run('INSERT INTO material_history (material_id, status, client_id, user_id, username) VALUES (?, ?, ?, ?, ?)', [material.id, 'Issued', clientId, req.session.user.id, req.session.user.username]);
+        if (itemName === 'table' || itemName === 'chair') {
+            // 1. Get booking type for the client
+            const booking = await get(`
+                SELECT s.type as space_type 
+                FROM bookings b 
+                JOIN spaces s ON b.space_id = s.id 
+                WHERE b.client_id = ? AND b.booking_status = 'active' AND b.event_session_id = ?
+            `, [clientId, res.locals.viewingSession.id]);
+
+            const spaceType = booking ? booking.space_type.toLowerCase() : '';
+
+            // 2. Define free limits and costs
+            const limits = {
+                table: spaceType === 'pavilion' ? 2 : 1,
+                chair: 2 // Same for all
+            };
+            const costs = { table: 600, chair: 100 };
+
+            // 3. Count how many of this item type are already issued to the client
+            const issuedCountResult = await get(
+                `SELECT COUNT(*) as count FROM material_stock WHERE issued_to_client_id = ? AND LOWER(name) = ? AND status = 'Issued'`,
+                [clientId, itemName]
+            );
+            const issuedCount = issuedCountResult.count || 0;
+
+            // 4. Check if the new item exceeds the free limit
+            if (issuedCount >= limits[itemName]) {
+                isPaidItem = true;
+                itemCost = costs[itemName];
+            }
+        }
+
+        await transaction(async (db) => {
+            // Update the specific material_stock item's status
+            await db.run("UPDATE material_stock SET status = 'Issued', issued_to_client_id = ? WHERE id = ?", [clientId, material.id]);
+
+            // Log the issuance in the material's history
+            await db.run('INSERT INTO material_history (material_id, status, client_id, user_id, username) VALUES (?, ?, ?, ?, ?)', [material.id, 'Issued', clientId, req.session.user.id, req.session.user.username]);
+
+            // --- Record Asset ID in Material Issues for tracking ---
+            if (itemName === 'table' || itemName === 'chair') {
+                const assetIdSuffix = material.unique_id.slice(-4);
+                const numberField = itemName === 'table' ? 'table_numbers' : 'chair_numbers';
+
+                // Find today's material issue record for this client, if one exists
+                let issueRecord = await db.get("SELECT id, table_numbers, chair_numbers FROM material_issues WHERE client_id = ? AND issue_date = date('now')", [clientId]);
+
+                if (issueRecord) {
+                    // Append the new asset ID to the existing list
+                    const existingNumbers = issueRecord[numberField] || '';
+                    const newNumbers = existingNumbers ? `${existingNumbers}, ${assetIdSuffix}` : assetIdSuffix;
+                    await db.run(`UPDATE material_issues SET ${numberField} = ? WHERE id = ?`, [newNumbers, issueRecord.id]);
+                } else {
+                    // If no record for today, create a new one just for tracking the asset number
+                    await db.run(`
+                        INSERT INTO material_issues (client_id, issue_date, ${numberField}, notes, event_session_id) 
+                        VALUES (?, date('now'), ?, ?, ?)`, [clientId, assetIdSuffix, 'Asset tracking record created via QR scan.', res.locals.viewingSession.id]
+                    );
+                }
+            }
+
+            // If it's a paid item, create a billable charge in material_issues
+            if (isPaidItem) {
+                const paidField = itemName === 'table' ? 'table_paid' : 'chair_paid';
+                await db.run(`
+                    INSERT INTO material_issues (client_id, issue_date, ${paidField}, total_payable, balance_due, notes, event_session_id) 
+                    VALUES (?, date('now'), 1, ?, ?, ?, ?)
+                `, [clientId, itemCost, itemCost, `Billed for 1 extra ${material.name} via QR scan.`, res.locals.viewingSession.id]);
+
+                // Also update the master due amount on the booking
+                const bookingForUpdate = await db.get('SELECT id FROM bookings WHERE client_id = ? AND booking_status = "active"', [clientId]);
+                if (bookingForUpdate) {
+                    await db.run('UPDATE bookings SET due_amount = due_amount + ? WHERE id = ?', [itemCost, bookingForUpdate.id]);
+                }
+            }
+        });
 
         await logAction(req.session.user.id, req.session.user.username, 'issue_material_stock', `Issued material #${material.id} (${material.name}) to client #${clientId}`);
         res.json({ success: true, message: `Successfully issued "${material.name}" to the client.` });

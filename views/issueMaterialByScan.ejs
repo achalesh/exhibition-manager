@@ -14,9 +14,9 @@
           <div class="mb-3">
             <label for="clientId" class="form-label">Client / Exhibitor</label>
             <select id="clientId" class="form-select" required>
-              <option value="" disabled selected>-- Select a Client --</option>
+              <option value="" disabled <%= !selectedClientId ? 'selected' : '' %>>-- Select a Client --</option>
               <% clients.forEach(client => { %>
-                <option value="<%= client.id %>"><%= client.name %> (<%= client.space_name %>)</option>
+                <option value="<%= client.id %>" <%= selectedClientId == client.id ? 'selected' : '' %>><%= client.name %> (<%= client.space_name %>)</option>
               <% }) %>
             </select>
           </div>

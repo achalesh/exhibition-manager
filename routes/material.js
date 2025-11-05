@@ -172,6 +172,41 @@ router.post('/edit/:id', async (req, res) => {
     }
 });
 
+// POST: Delete a material issue
+router.post('/delete/:id', async (req, res) => {
+    const issueId = req.params.id;
+
+    if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+        req.session.flash = { type: 'warning', message: 'Cannot delete data from an archived session.' };
+        // We need to find the booking to redirect back to
+        const issue = await get('SELECT client_id FROM material_issues WHERE id = ?', [issueId]);
+        if (issue) {
+            const booking = await get('SELECT id FROM bookings WHERE client_id = ?', [issue.client_id]);
+            if (booking) return res.redirect(`/booking/details-full/${booking.id}`);
+        }
+        return res.redirect('/booking/list');
+    }
+
+    db.serialize(async () => {
+        try {
+            db.run('BEGIN TRANSACTION');
+            const issue = await get('SELECT client_id, total_payable FROM material_issues WHERE id = ?', [issueId]);
+            if (!issue) throw new Error('Material issue not found.');
+            const booking = await get('SELECT id FROM bookings WHERE client_id = ?', [issue.client_id]);
+            if (booking && issue.total_payable > 0) {
+                await run('UPDATE bookings SET due_amount = due_amount - ? WHERE id = ?', [issue.total_payable, booking.id]);
+            }
+            await run('DELETE FROM material_issues WHERE id = ?', [issueId]);
+            db.run('COMMIT');
+            res.redirect(`/booking/details-full/${booking.id}?message=Material issue deleted successfully.`);
+        } catch (err) {
+            db.run('ROLLBACK');
+            console.error(`Error deleting material issue #${issueId}:`, err.message);
+            res.status(500).send('Failed to delete material issue.');
+        }
+    });
+});
+
 const isAdmin = (req, res, next) => {
     if (req.session.user && req.session.user.role === 'admin') {
         return next();
