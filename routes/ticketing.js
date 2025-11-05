@@ -80,7 +80,7 @@ router.post('/rides/add', async (req, res) => {
 
     try {
         await run('INSERT INTO rides (name, rate) VALUES (?, ?)', [name, parseFloat(rate)]);
-        await logAction(req.session.user.id, req.session.user.username, 'create_ride', `Created ride: ${name}`);
+        await logAction(req.session.user.id, req.session.user.username, 'create_ride', `Created ride: ${name}`, res.locals.activeSession.id);
         req.session.flash = { type: 'success', message: `Ride "${name}" added successfully.` };
     } catch (err) {
         console.error("Error adding ride:", err);
@@ -97,7 +97,7 @@ router.post('/rides/update/:id', async (req, res) => {
 
     try {
         await run('UPDATE rides SET name = ?, rate = ?, is_active = ? WHERE id = ?', [name, parseFloat(rate), isActive, id]);
-        await logAction(req.session.user.id, req.session.user.username, 'update_ride', `Updated ride #${id}: ${name}`);
+        await logAction(req.session.user.id, req.session.user.username, 'update_ride', `Updated ride #${id}: ${name}`, res.locals.activeSession.id);
         req.session.flash = { type: 'success', message: 'Ride updated successfully.' };
     } catch (err) {
         console.error("Error updating ride:", err);
@@ -203,7 +203,7 @@ router.post('/stock/add', async (req, res) => {
             currentStart = currentEnd + 1;
         }
 
-        await logAction(req.session.user.id, req.session.user.username, 'create_ticket_stock', `Added stock range ${startNum}-${endNum} as ${bundlesCreated} bundle(s) @ ₹${rate}`);
+        await logAction(req.session.user.id, req.session.user.username, 'create_ticket_stock', `Added stock range ${startNum}-${endNum} as ${bundlesCreated} bundle(s) @ ₹${rate}`, event_session_id);
         req.session.flash = { type: 'success', message: `Successfully added ${bundlesCreated} ticket bundle(s).` };
     } catch (err) {
         console.error("Error adding ticket stock:", err);
@@ -366,7 +366,7 @@ router.post('/distribute', async (req, res) => {
         );
         await run('COMMIT');
 
-        await logAction(req.session.user.id, req.session.user.username, 'distribute_tickets', `Distributed stock #${stock_id} to staff #${staff_id}`);
+        await logAction(req.session.user.id, req.session.user.username, 'distribute_tickets', `Distributed stock #${stock_id} to staff #${staff_id}`, event_session_id);
         req.session.flash = { type: 'success', message: 'Tickets distributed successfully.' };
     } catch (err) {
         await run('ROLLBACK');
@@ -600,7 +600,7 @@ router.post('/settle/:id', async (req, res) => {
                  VALUES (?, ?, ?, ?, ?, ?, ?, 'Available')`,
                 [stock.category_id, stock.rate, stock.color, returnedStart, stock.end_number, stock.entry_date, dist.event_session_id]
             );
-            await logAction(req.session.user.id, req.session.user.username, 'split_ticket_stock', `Created new available stock bundle ${returnedStart}-${stock.end_number} from settlement.`);
+            await logAction(req.session.user.id, req.session.user.username, 'split_ticket_stock', `Created new available stock bundle ${returnedStart}-${stock.end_number} from settlement.`, dist.event_session_id);
         } else {
             // If the whole bundle was sold, just update the status
             await run(`UPDATE ticket_stock SET status = 'Settled' WHERE id = ?`, [dist.stock_id]);
@@ -626,7 +626,7 @@ router.post('/settle/:id', async (req, res) => {
 
         await run('COMMIT');
 
-        await logAction(req.session.user.id, req.session.user.username, 'settle_tickets', `Settled distribution #${id}. Revenue: ${calculated_revenue}`);
+        await logAction(req.session.user.id, req.session.user.username, 'settle_tickets', `Settled distribution #${id}. Revenue: ${calculated_revenue}`, dist.event_session_id);
         req.session.flash = { type: 'success', message: 'Sales settled successfully.' };
         res.redirect('/ticketing/distribute');
     } catch (err) {
@@ -654,7 +654,7 @@ router.post('/distribute/cancel/:id', async (req, res) => {
         await run("DELETE FROM ticket_distributions WHERE id = ?", [id]);
         await run('COMMIT');
 
-        await logAction(req.session.user.id, req.session.user.username, 'cancel_ticket_distribution', `Cancelled distribution #${id}`);
+        await logAction(req.session.user.id, req.session.user.username, 'cancel_ticket_distribution', `Cancelled distribution #${id}`, dist.event_session_id);
         req.session.flash = { type: 'success', message: 'Distribution has been cancelled and stock is available again.' };
     } catch (err) {
         await run('ROLLBACK');
@@ -696,7 +696,7 @@ router.post('/settle/revert/:id', async (req, res) => {
 
         await run('COMMIT');
 
-        await logAction(req.session.user.id, req.session.user.username, 'revert_ticket_settlement', `Reverted settlement for distribution #${id}`);
+        await logAction(req.session.user.id, req.session.user.username, 'revert_ticket_settlement', `Reverted settlement for distribution #${id}`, dist.event_session_id);
         req.session.flash = { type: 'success', message: 'Settlement has been reverted. The ticket book is now marked as Distributed.' };
     } catch (err) {
         await run('ROLLBACK');

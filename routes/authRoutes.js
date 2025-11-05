@@ -22,7 +22,12 @@ router.post('/login', async (req, res) => {
         username: user.username,
         role: user.role
       };
-      res.redirect('/dashboard');
+      // Redirect based on role
+      if (user.role === 'material_handler') {
+        res.redirect('/materials/issue');
+      } else {
+        res.redirect('/dashboard');
+      }
     } else {
       res.render('login', { title: 'Login', error: 'Invalid username or password' });
     }

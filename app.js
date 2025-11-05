@@ -85,8 +85,8 @@ app.use('/', require('./routes/authRoutes')); // We will create this file.
 app.use('/space', isAuthenticated, hasRole(['booking_manager']), spaceRoutes);
 app.use('/booking', isAuthenticated, hasRole(['booking_manager']), bookingRoutes);
 app.use('/electric', isAuthenticated, hasRole(['booking_manager']), electricRoutes);
-app.use('/material', isAuthenticated, hasRole(['booking_manager']), materialRoutes);
-app.use('/materials', isAuthenticated, isAdmin, materialsRoutes); // Admin-only
+app.use('/material', isAuthenticated, hasRole(['booking_manager', 'admin']), materialRoutes); // Old form-based system
+app.use('/materials', isAuthenticated, hasRole(['admin', 'material_handler']), materialsRoutes); // QR-based system
 app.use('/charges', isAuthenticated, hasRole(['accountant']), chargesRoutes);
 app.use('/shed', isAuthenticated, hasRole(['booking_manager']), shedRoutes);
 app.use('/staff', isAuthenticated, isAdmin, staffRoutes);
@@ -101,7 +101,13 @@ app.use('/electric-items', isAuthenticated, isAdmin, electricItemsRoutes);
 app.use('/notification', isAuthenticated, notificationRoutes);
 
 // Dashboard route
-app.get('/dashboard', isAuthenticated, async (req, res) => {
+app.get('/dashboard', isAuthenticated, (req, res, next) => {
+  // If the user is a material_handler, redirect them away from the dashboard
+  if (req.session.user && req.session.user.role === 'material_handler') {
+    return res.redirect('/materials/issue');
+  }
+  next();
+}, async (req, res) => {
   try {
     const viewingSessionId = res.locals.viewingSession.id;
 
@@ -157,7 +163,7 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
       const bookingNotificationsQuery = all("SELECT be.*, b.exhibitor_name, 'Booking' as edit_type FROM booking_edits be JOIN bookings b ON be.booking_id = b.id WHERE be.user_id = ? AND (be.status = 'pending' OR (be.status IN ('approved', 'rejected') AND be.user_notified = 0))", [req.session.user.id]);
       const paymentNotificationsQuery = all("SELECT pe.*, b.exhibitor_name, 'Payment' as edit_type FROM payment_edits pe JOIN payments p ON pe.payment_id = p.id JOIN bookings b ON p.booking_id = b.id WHERE pe.user_id = ? AND (pe.status = 'pending' OR (pe.status IN ('approved', 'rejected') AND pe.user_notified = 0))", [req.session.user.id]);
       const materialNotificationsQuery = all("SELECT me.*, c.name as exhibitor_name, 'Material' as edit_type FROM material_issue_edits me JOIN material_issues mi ON me.material_issue_id = mi.id JOIN clients c ON mi.client_id = c.id WHERE me.user_id = ? AND (me.status = 'pending' OR (me.status IN ('approved', 'rejected') AND me.user_notified = 0))", [req.session.user.id]);
-      const electricNotificationsQuery = all("SELECT ee.*, b.exhibitor_name, 'Electric' as edit_type FROM electric_bill_edits ee JOIN electric_bills eb ON ee.electric_bill_id = eb.id JOIN bookings b ON eb.booking_id = b.id WHERE ee.user_id = ? AND (ee.status = 'pending' OR (ee.status IN ('approved', 'rejected') AND ee.user_notified = 0))", [req.session.user.id]);
+      const electricNotificationsQuery = all("SELECT ee.*, b.exhibitor_name, 'Electric' as edit_type FROM electric_bill_edits ee JOIN electric_bills eb ON ee.electric_bill_id = eb.id JOIN bookings b ON eb.booking_id = b.id WHERE ee.user_id = ? AND (be.status = 'pending' OR (be.status IN ('approved', 'rejected') AND ee.user_notified = 0))", [req.session.user.id]);
 
       const allNotifications = await Promise.all([bookingNotificationsQuery, paymentNotificationsQuery, materialNotificationsQuery, electricNotificationsQuery]);
       const userNotifications = [].concat(...allNotifications).sort((a, b) => new Date(b.request_date) - new Date(a.request_date));

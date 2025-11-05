@@ -70,6 +70,7 @@ async function setupDatabase() {
       await run(`ALTER TABLE payments ADD COLUMN upi_paid REAL DEFAULT 0`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
       await run(`ALTER TABLE payments ADD COLUMN remarks TEXT`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
       await run(`ALTER TABLE material_stock ADD COLUMN event_session_id INTEGER REFERENCES event_sessions(id)`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
+      await run(`ALTER TABLE material_history ADD COLUMN event_session_id INTEGER REFERENCES event_sessions(id)`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
       await run(`ALTER TABLE material_stock ADD COLUMN sequence INTEGER`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
       await run(`ALTER TABLE exhibition_details ADD COLUMN logo_path TEXT`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
       await run(`ALTER TABLE booking_edits ADD COLUMN rejection_reason TEXT`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
@@ -186,6 +187,7 @@ async function setupDatabase() {
         user_id INTEGER,
         username TEXT,
         client_id INTEGER,
+        event_session_id INTEGER REFERENCES event_sessions(id),
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (material_id) REFERENCES material_stock(id) ON DELETE CASCADE,
         FOREIGN KEY (user_id) REFERENCES users(id),

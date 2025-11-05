@@ -71,11 +71,11 @@ router.post('/save', async (req, res) => {
         if (id) {
             // Update existing item
             await run('UPDATE electric_items SET name = ?, service_charge = ?, fitting_charge = ? WHERE id = ?', [name, serviceCharge, fittingCharge, id]);
-            await logAction(req.session.user.id, req.session.user.username, 'update_electric_item', `Updated item #${id}: ${name}`);
+            await logAction(req.session.user.id, req.session.user.username, 'update_electric_item', `Updated item #${id}: ${name}`, res.locals.activeSession.id);
         } else {
             // Insert new item
             await run('INSERT INTO electric_items (name, service_charge, fitting_charge) VALUES (?, ?, ?)', [name, serviceCharge, fittingCharge]);
-            await logAction(req.session.user.id, req.session.user.username, 'create_electric_item', `Created item: ${name}`);
+            await logAction(req.session.user.id, req.session.user.username, 'create_electric_item', `Created item: ${name}`, res.locals.activeSession.id);
         }
         res.redirect('/electric-items');
     } catch (err) {
@@ -89,7 +89,7 @@ router.post('/delete/:id', async (req, res) => {
     const { id } = req.params;
     try {
         await run('DELETE FROM electric_items WHERE id = ?', [id]);
-        await logAction(req.session.user.id, req.session.user.username, 'delete_electric_item', `Deleted item #${id}`);
+        await logAction(req.session.user.id, req.session.user.username, 'delete_electric_item', `Deleted item #${id}`, res.locals.activeSession.id);
         res.redirect('/electric-items?message=Item deleted successfully.');
     } catch (err) {
         console.error('Error deleting electric item:', err.message);

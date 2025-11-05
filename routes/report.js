@@ -503,13 +503,12 @@ router.get('/booking-summary/csv', async (req, res) => {
 // GET /report/audit-log - View the audit log of user actions
 router.get('/audit-log', async (req, res) => {
   try {
-    const viewingSessionId = res.locals.viewingSession.id;
     const { page = 1, q } = req.query;
     const limit = 50;
     const offset = (parseInt(page) - 1) * limit;
 
-    let whereClauses = ['l.event_session_id = ?'];
-    let params = [viewingSessionId];
+    let whereClauses = [];
+    let params = [];
 
     if (q) {
       whereClauses.push('(l.username LIKE ? OR l.action LIKE ? OR l.details LIKE ?)');
@@ -944,6 +943,7 @@ router.get('/damaged-materials', async (req, res) => {
 
     let sql = `
       SELECT 
+        id,
         name,
         unique_id,
         description,

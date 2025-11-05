@@ -63,12 +63,13 @@ function run(sql, params = []) {
  * @param {string} username - The username of the user performing the action.
  * @param {string} action - A description of the action (e.g., 'create_user').
  * @param {string} [details] - Additional details about the action.
+ * @param {number} event_session_id - The ID of the session in which the action occurred.
  */
-async function logAction(userId, username, action, details = null) {
-  const sql = `INSERT INTO logs (timestamp, user_id, username, action, details) VALUES (datetime('now', 'localtime'), ?, ?, ?, ?)`;
+async function logAction(userId, username, action, details = null, event_session_id = null) {
+  const sql = `INSERT INTO logs (timestamp, user_id, username, action, details, event_session_id) VALUES (datetime('now', 'localtime'), ?, ?, ?, ?, ?)`;
   try {
     // userId can be null for events like failed logins where the user is not authenticated
-    await run(sql, [userId, username, action, details]);
+    await run(sql, [userId, username, action, details, event_session_id]);
   } catch (err) {
     console.error('Failed to write to audit log:', err.message);
   }

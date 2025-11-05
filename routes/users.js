@@ -5,7 +5,7 @@ const bcrypt = require('bcrypt');
 
 // Note: All routes in this file are already protected by `isAdmin` in app.js
 
-const availableRoles = ['admin', 'accountant', 'booking_manager', 'ticketing_manager', 'user'];
+const availableRoles = ['admin', 'accountant', 'booking_manager', 'ticketing_manager', 'material_handler', 'user'];
 
 // GET /users/manage - Show user management page
 router.get('/manage', async (req, res) => {

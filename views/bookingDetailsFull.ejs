@@ -245,6 +245,11 @@
                 <% } %>
               </div>
             <% }) %>
+            <% if (issuedMaterialCount > 0) { %>
+              <div class="mt-3 text-end">
+                <a href="/materials/issued-to/<%= booking.client_id %>" class="btn btn-sm btn-info">View <%= issuedMaterialCount %> Issued QR Items</a>
+              </div>
+            <% } %>
           <% } else { %>
             <p class="text-muted">No materials issued.</p>
           <% } %>

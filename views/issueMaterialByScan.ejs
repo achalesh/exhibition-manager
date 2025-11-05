@@ -4,8 +4,11 @@
   <div class="row justify-content-center">
     <div class="col-lg-6">
       <div class="card shadow-sm">
-        <div class="card-header bg-primary text-white">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
           <h4 class="mb-0"><%= title %></h4>
+          <% if (user && user.role === 'material_handler') { %>
+            <a href="/materials/return" class="btn btn-light btn-sm">Go to Return Page <i class="bi bi-arrow-right-circle"></i></a>
+          <% } %>
         </div>
         <div class="card-body">
           <p class="text-muted">Select a client, then scan a material's QR code or enter its Unique ID to issue the item.</p>

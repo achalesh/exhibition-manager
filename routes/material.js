@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { all, get, run, db } = require('../db-helpers');
+const { all, get, run, db, transaction } = require('../db-helpers');
 
 // GET: Show form to issue materials
 router.get('/issue', async (req, res) => {
@@ -109,6 +109,12 @@ router.get('/edit/:id', async (req, res) => {
             return res.status(404).send('Material issue record not found.');
         }
 
+        // Find the booking_id for the cancel button link
+        const booking = await get('SELECT id FROM bookings WHERE client_id = ? AND event_session_id = ? AND booking_status = "active"', [issue.client_id, res.locals.viewingSession.id]);
+        if (booking) {
+            issue.booking_id = booking.id;
+        }
+
         const campSuggestions = suggestions?.camps ? suggestions.camps.split(',') : [];
 
         res.render('editMaterial', {
@@ -187,24 +193,26 @@ router.post('/delete/:id', async (req, res) => {
         return res.redirect('/booking/list');
     }
 
-    db.serialize(async () => {
-        try {
-            db.run('BEGIN TRANSACTION');
-            const issue = await get('SELECT client_id, total_payable FROM material_issues WHERE id = ?', [issueId]);
+    try {
+        let bookingIdToRedirect;
+        await transaction(async (db) => {
+            const issue = await db.get('SELECT client_id, total_payable FROM material_issues WHERE id = ?', [issueId]);
             if (!issue) throw new Error('Material issue not found.');
-            const booking = await get('SELECT id FROM bookings WHERE client_id = ?', [issue.client_id]);
-            if (booking && issue.total_payable > 0) {
-                await run('UPDATE bookings SET due_amount = due_amount - ? WHERE id = ?', [issue.total_payable, booking.id]);
+            
+            const booking = await db.get('SELECT id FROM bookings WHERE client_id = ?', [issue.client_id]);
+            if (!booking) throw new Error('Associated booking not found.');
+            bookingIdToRedirect = booking.id;
+
+            if (issue.total_payable > 0) {
+                await db.run('UPDATE bookings SET due_amount = due_amount - ? WHERE id = ?', [issue.total_payable, booking.id]);
             }
-            await run('DELETE FROM material_issues WHERE id = ?', [issueId]);
-            db.run('COMMIT');
-            res.redirect(`/booking/details-full/${booking.id}?message=Material issue deleted successfully.`);
-        } catch (err) {
-            db.run('ROLLBACK');
-            console.error(`Error deleting material issue #${issueId}:`, err.message);
-            res.status(500).send('Failed to delete material issue.');
-        }
-    });
+            await db.run('DELETE FROM material_issues WHERE id = ?', [issueId]);
+        });
+        res.redirect(`/booking/details-full/${bookingIdToRedirect}?message=Material issue deleted successfully.`);
+    } catch (err) {
+        console.error(`Error deleting material issue #${issueId}:`, err.message);
+        res.status(500).send('Failed to delete material issue.');
+    }
 });
 
 const isAdmin = (req, res, next) => {

@@ -520,9 +520,7 @@ router.post('/vacate/:id', async (req, res) => {
       }
 
       // 2. Delete associated charge records
-      await run('DELETE FROM electric_bills WHERE booking_id = ?', [bookingId]);
-      // Note: Material issues are linked to client_id, this will delete all for that client in the session.
-      // This is based on the previous logic. If a client can have multiple bookings, this might need refinement.
+      await run('DELETE FROM electric_bills WHERE booking_id = ? AND event_session_id = ?', [bookingId, res.locals.activeSession.id]);
       await run('DELETE FROM material_issues WHERE client_id = ? AND event_session_id = ?', [booking.client_id, res.locals.activeSession.id]);
       await run('DELETE FROM shed_allocations WHERE booking_id = ?', [bookingId]);
       await run('DELETE FROM shed_bills WHERE booking_id = ?', [bookingId]);
