@@ -6,7 +6,12 @@
       <h2 class="mb-1"><%= title %></h2>
       <p class="text-muted mb-0">Unique ID: <span class="font-monospace"><%= material.unique_id %></span></p>
     </div>
-    <a href="/materials" class="btn btn-outline-secondary">« Back to Material Stock</a>
+    < <form action="/materials/write-off/<%= material.id %>" method="POST" onsubmit="return confirm('Are you sure you want to permanently WRITE OFF this item? This cannot be undone.');">
+        <input type="hidden" name="redirectUrl" value="/materials">
+        <button type="submit" class="btn btn-danger"><i class="bi bi-trash-fill me-1"></i> Write-Off Item</button>
+      </form>
+      <a href="/materials" class="btn btn-outline-secondary">« Back to Material Stock</a>
+    </div>
   </div>
 
   <div class="card shadow-sm">
@@ -19,6 +24,7 @@
               <th>Action / Status</th>
               <th>Details</th>
               <th>User</th>
+              <th>Notes</th>
             </tr>
           </thead>
           <tbody>
@@ -44,11 +50,12 @@
                     <% } %>
                   </td>
                   <td><%= entry.username || 'System' %></td>
+                  <td class="text-muted fst-italic"><%= entry.notes || '' %></td>
                 </tr>
               <% }) %>
             <% } else { %>
               <tr>
-                <td colspan="4" class="text-center text-muted">No history found for this item.</td>
+                <td colspan="5" class="text-center text-muted">No history found for this item.</td>
               </tr>
             <% } %>
           </tbody>

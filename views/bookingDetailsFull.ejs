@@ -62,8 +62,11 @@
     <div class="col-lg-7">
       <!-- Financial Summary -->
       <div class="card shadow-sm mb-4">
-        <div class="card-header">
+        <div class="card-header d-flex justify-content-between align-items-center">
           <h5 class="mb-0"><i class="bi bi-calculator me-2"></i>Financial Summary</h5>
+          <div class="no-print">
+            <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#writeOffModal" <%= isReadOnly ? 'disabled' : '' %>><i class="bi bi-eraser-fill me-1"></i> Write-Off</button>
+          </div>
         </div>
         <div class="card-body p-0">
           <table class="table table-bordered table-striped mb-0">
@@ -100,12 +103,20 @@
                 <td class="text-end text-success"><%= booking.financials.shed.paid.toFixed(2) %></td>
                 <td class="text-end fw-bold <%= booking.financials.shed.due > 0 ? 'text-danger' : '' %>"><%= booking.financials.shed.due.toFixed(2) %></td>
               </tr>
+              <% if (booking.financials.write_offs.amount > 0) { %>
+              <tr class="table-warning">
+                <td>Write-Offs</td>
+                <td class="text-end" colspan="2">- <%= booking.financials.write_offs.amount.toFixed(2) %></td>
+                <td class="text-end fw-bold text-danger">- <%= booking.financials.write_offs.amount.toFixed(2) %></td>
+              </tr>
+              <% } %>
             </tbody>
             <tfoot class="table-dark">
               <%
                 const grandTotalCharged = booking.financials.rent.charged + booking.financials.electric.charged + booking.financials.material.charged + booking.financials.shed.charged;
                 const grandTotalPaid = booking.financials.rent.paid + booking.financials.electric.paid + booking.financials.material.paid + booking.financials.shed.paid;
-                const grandTotalDue = grandTotalCharged - grandTotalPaid;
+                const totalWriteOffs = booking.financials.write_offs.amount;
+                const grandTotalDue = grandTotalCharged - grandTotalPaid - totalWriteOffs;
               %>
               <tr>
                 <td class="text-end"><strong>Grand Total</strong></td>
@@ -282,6 +293,34 @@
     </div>
   </div>
 
+  <!-- Write-Off Modal -->
+  <div class="modal fade" id="writeOffModal" tabindex="-1" aria-labelledby="writeOffModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="writeOffModalLabel">Write-Off Due Amount</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form action="/booking/write-off/<%= booking.id %>" method="POST">
+          <div class="modal-body">
+            <p>Enter the amount to write off for <strong><%= booking.exhibitor_name %></strong>. This action will be recorded as an expenditure and cannot be undone.</p>
+            <div class="mb-3">
+              <label for="writeOffAmount" class="form-label">Amount to Write-Off (₹)</label>
+              <input type="number" class="form-control" id="writeOffAmount" name="amount" step="0.01" required min="0.01">
+            </div>
+            <div class="mb-3">
+              <label for="writeOffReason" class="form-label">Reason for Write-Off</label>
+              <textarea class="form-control" id="writeOffReason" name="reason" rows="3" required placeholder="e.g., Damaged goods compensation, marketing adjustment, etc."></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-danger">Confirm Write-Off</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 </div>
 
 <%- include('partials/footer') %>

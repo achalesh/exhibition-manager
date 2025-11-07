@@ -1,7 +1,17 @@
-<nav class="nav nav-pills nav-fill mb-4 no-print">
-    <a class="nav-link <%= currentPath === '/ticketing' ? 'active' : '' %>" href="/ticketing">Dashboard</a>
-    <a class="nav-link <%= currentPath.startsWith('/ticketing/rides') ? 'active' : '' %>" href="/ticketing/rides">Manage Rides</a>
-    <a class="nav-link <%= currentPath.startsWith('/ticketing/stock') ? 'active' : '' %>" href="/ticketing/stock">Manage Stock</a>
-    <a class="nav-link <%= currentPath.startsWith('/ticketing/distribute') || currentPath.startsWith('/ticketing/settle') ? 'active' : '' %>" href="/ticketing/distribute">Distribute & Settle</a>
-    <a class="nav-link <%= currentPath.startsWith('/ticketing/report') ? 'active' : '' %>" href="/ticketing/report">Reports</a>
-</nav>
+<ul class="nav nav-tabs mb-4">
+  <li class="nav-item">
+    <a class="nav-link <%= currentPath === '/ticketing' ? 'active' : '' %>" href="/ticketing">
+      <i class="bi bi-grid-1x2-fill me-1"></i> Dashboard
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link <%= currentPath === '/ticketing/stock' ? 'active' : '' %>" href="/ticketing/stock">
+      <i class="bi bi-stack me-1"></i> Manage Stock
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link <%= currentPath === '/ticketing/distribute' ? 'active' : '' %>" href="/ticketing/distribute">
+      <i class="bi bi-person-check-fill me-1"></i> Distribute & Settle
+    </a>
+  </li>
+</ul>

@@ -274,7 +274,8 @@ router.get('/details-full/:id', async (req, res) => {
     const electricCharged = electricBills.reduce((sum, bill) => sum + (bill.total_amount || 0), 0);
     const materialCharged = materials.reduce((sum, issue) => sum + (issue.total_payable || 0), 0);
     const shedRentFromAllocation = (await get('SELECT SUM(s.rent) as total FROM shed_allocations sa JOIN sheds s ON sa.shed_id = s.id WHERE sa.booking_id = ? AND sa.event_session_id = ?', [bookingId, viewingSessionId]))?.total || 0;
-    const shedCharged = shedRentFromAllocation;
+    const shedRentFromBills = (await get('SELECT SUM(amount) as total FROM shed_bills WHERE booking_id = ? AND event_session_id = ?', [bookingId, viewingSessionId]))?.total || 0;
+    const shedCharged = shedRentFromAllocation + shedRentFromBills;
     
     // 2. Calculate total payments for each category (using the raw query result)
     const payments = await get('SELECT SUM(rent_paid) as rent, SUM(electric_paid) as electric, SUM(material_paid) as material, SUM(shed_paid) as shed FROM payments WHERE booking_id = ? AND event_session_id = ?', [bookingId, viewingSessionId]);
@@ -282,13 +283,15 @@ router.get('/details-full/:id', async (req, res) => {
     const electricPaid = payments?.electric || 0;
     const materialPaid = payments?.material || 0;
     const shedPaid = payments?.shed || 0;
+    const totalWriteOffs = (await get('SELECT SUM(amount) as total FROM write_offs WHERE booking_id = ? AND event_session_id = ?', [bookingId, viewingSessionId]))?.total || 0;
 
     // 3. Attach financial summary to booking object
     booking.financials = {
-      rent: { charged: rentCharged, paid: rentPaid, due: rentCharged - (booking.discount || 0) - rentPaid },
+      rent: { charged: rentCharged, paid: rentPaid, due: rentCharged - (booking.discount || 0) - rentPaid }, // Discount is only on rent
       electric: { charged: electricCharged, paid: electricPaid, due: electricCharged - electricPaid },
       material: { charged: materialCharged, paid: materialPaid, due: materialCharged - materialPaid },
-      shed: { charged: shedCharged, paid: shedPaid, due: shedCharged - shedPaid }
+      shed: { charged: shedCharged, paid: shedPaid, due: shedCharged - shedPaid },
+      write_offs: { amount: totalWriteOffs }
     };
 
     // Fetch count of issued materials for the link
@@ -446,6 +449,47 @@ router.post('/reject/:edit_id', async (req, res) => {
   const { rejection_reason } = req.body;
   await run(`UPDATE booking_edits SET status = 'rejected', rejection_reason = ? WHERE id = ?`, [rejection_reason, editId]);
   res.redirect('/dashboard?message=Edit has been rejected.');
+});
+
+// POST /booking/write-off/:id - Write off a due amount
+router.post('/write-off/:id', async (req, res) => {
+  const bookingId = req.params.id;
+  const { amount, reason } = req.body;
+  const writeOffAmount = parseFloat(amount);
+
+  if (!writeOffAmount || writeOffAmount <= 0) {
+    req.session.flash = { type: 'danger', message: 'Invalid write-off amount.' };
+    return res.redirect(`/booking/details-full/${bookingId}`);
+  }
+
+  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+    req.session.flash = { type: 'warning', message: 'Cannot perform write-offs in an archived session.' };
+    return res.redirect(`/booking/details-full/${bookingId}`);
+  }
+
+  const activeSessionId = res.locals.activeSession.id;
+  const user = req.session.user;
+
+  db.serialize(async () => {
+    try {
+      db.run('BEGIN TRANSACTION');
+      // 1. Record the write-off
+      await run('INSERT INTO write_offs (booking_id, amount, reason, write_off_date, user_id, event_session_id) VALUES (?, ?, ?, date("now"), ?, ?)', [bookingId, writeOffAmount, reason, user.id, activeSessionId]);
+      // 2. Reduce the due amount on the booking
+      await run('UPDATE bookings SET due_amount = due_amount - ? WHERE id = ?', [writeOffAmount, bookingId]);
+      // 3. Add to accounting ledger as an expenditure
+      const booking = await get('SELECT exhibitor_name FROM bookings WHERE id = ?', [bookingId]);
+      const description = `Amount written off for ${booking.exhibitor_name}. Reason: ${reason}`;
+      await run(`INSERT INTO accounting_transactions (transaction_type, category, description, amount, transaction_date, user_id, event_session_id) VALUES ('expenditure', 'Bad Debt / Write-Off', ?, ?, date('now'), ?, ?)`, [description, writeOffAmount, user.id, activeSessionId]);
+      db.run('COMMIT');
+      req.session.flash = { type: 'success', message: `Successfully wrote off ₹${writeOffAmount.toFixed(2)}.` };
+    } catch (err) {
+      db.run('ROLLBACK');
+      console.error('Error processing write-off:', err);
+      req.session.flash = { type: 'danger', message: 'Failed to process write-off.' };
+    }
+    res.redirect(`/booking/details-full/${bookingId}`);
+  });
 });
 
 // GET: Rent Receipt view

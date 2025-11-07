@@ -268,9 +268,9 @@ router.post('/bulk-delete', isAdmin, async (req, res) => {
 });
 
 // POST: Update a material's status (e.g., from Damaged to Available)
-router.post('/update-status/:id', async (req, res) => {
+router.post('/update-status/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
-    const { newStatus, redirectUrl } = req.body;
+    const { newStatus, redirectUrl, notes } = req.body;
 
     if (!newStatus) {
         return res.status(400).send('New status is required.');
@@ -283,11 +283,34 @@ router.post('/update-status/:id', async (req, res) => {
         }
         await run('UPDATE material_stock SET status = ? WHERE id = ?', [newStatus, id]);
         // Log the status change
-        await run('INSERT INTO material_history (material_id, status, user_id, username, event_session_id) VALUES (?, ?, ?, ?, ?)', [id, newStatus, req.session.user.id, req.session.user.username, res.locals.activeSession.id]);
+        await run('INSERT INTO material_history (material_id, status, user_id, username, event_session_id, notes) VALUES (?, ?, ?, ?, ?, ?)', [id, newStatus, req.session.user.id, req.session.user.username, res.locals.activeSession.id, notes]);
         res.redirect(`${redirectUrl || '/materials'}?message=Material status updated successfully.`);
     } catch (err) {
         console.error('Error updating material status:', err.message);
         res.status(500).send('Failed to update material status.');
+    }
+});
+
+// POST: Write-off a material (delete it permanently)
+router.post('/write-off/:id', isAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { redirectUrl } = req.body;
+
+    try {
+        const material = await get('SELECT qr_code_path FROM material_stock WHERE id = ?', [id]);
+        if (material && material.qr_code_path) {
+            const imagePath = path.join(__dirname, '..', 'public', material.qr_code_path);
+            if (fs.existsSync(imagePath)) {
+                fs.unlinkSync(imagePath);
+            }
+        }
+        // The ON DELETE CASCADE in the database schema will handle deleting material_history entries.
+        await run('DELETE FROM material_stock WHERE id = ?', [id]);
+        await logAction(req.session.user.id, req.session.user.username, 'write_off_material', `Wrote off and deleted material stock item #${id}`, res.locals.activeSession.id);
+        res.redirect(`${redirectUrl || '/materials'}?message=Material item written off and deleted successfully.`);
+    } catch (err) {
+        console.error('Error writing off material:', err.message);
+        res.status(500).send('Failed to write off material.');
     }
 });
 
@@ -435,7 +458,7 @@ router.get('/return', (req, res) => {
 
 // POST API: Return a single material item to stock
 router.post('/api/return-item', async (req, res) => {
-    const { uniqueId, status } = req.body;
+    const { uniqueId, status, notes } = req.body;
 
     if (!uniqueId) {
         return res.status(400).json({ success: false, message: 'Unique ID is required.' });
@@ -460,7 +483,7 @@ router.post('/api/return-item', async (req, res) => {
             await db.run("UPDATE material_stock SET status = ?, issued_to_client_id = NULL WHERE id = ?", [newStatus, material.id]);
 
             // 2. Log the return action in the material's history
-            await db.run('INSERT INTO material_history (material_id, status, client_id, user_id, username, event_session_id) VALUES (?, ?, ?, ?, ?, ?)', [material.id, newStatus, material.issued_to_client_id, req.session.user.id, req.session.user.username, res.locals.activeSession.id]);
+            await db.run('INSERT INTO material_history (material_id, status, client_id, user_id, username, event_session_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)', [material.id, newStatus, material.issued_to_client_id, req.session.user.id, req.session.user.username, res.locals.activeSession.id, notes]);
 
             // 3. Remove the asset ID from the client's material_issues record
             const itemName = material.name.toLowerCase();
@@ -566,6 +589,55 @@ router.post('/return-all/:clientId', async (req, res) => {
         req.session.flash = { type: 'success', message: `Successfully returned all ${materialsToReturn.length} items.` };
         const booking = await get('SELECT id FROM bookings WHERE client_id = ? AND event_session_id = ?', [clientId, activeSessionId]);
         res.redirect(`/booking/details-full/${booking.id}`);
+    } catch (err) {
+        console.error('Error during bulk return:', err.message);
+        res.status(500).send('A server error occurred during the bulk return process.');
+    }
+});
+
+// POST: Return all materials for a specific client
+router.post('/return-all/:clientId', async (req, res) => {
+    const { clientId } = req.params;
+    const user = req.session.user;
+    const activeSessionId = res.locals.activeSession.id;
+
+    try {
+        const materialsToReturn = await all('SELECT id, unique_id, name FROM material_stock WHERE issued_to_client_id = ? AND status = ?', [clientId, 'Issued']);
+
+        const booking = await get('SELECT id FROM bookings WHERE client_id = ? AND event_session_id = ? AND booking_status = "active"', [clientId, activeSessionId]);
+        const redirectUrl = booking ? `/booking/details-full/${booking.id}` : '/materials';
+
+        if (materialsToReturn.length === 0) {
+            req.session.flash = { type: 'info', message: 'No materials were found to be returned for this client.' };
+            return res.redirect(redirectUrl);
+        }
+
+        await transaction(async (db) => {
+            for (const material of materialsToReturn) {
+                // 1. Update the material's status and remove client assignment
+                await db.run("UPDATE material_stock SET status = 'Available', issued_to_client_id = NULL WHERE id = ?", [material.id]);
+
+                // 2. Log the return action in the material's history
+                await db.run('INSERT INTO material_history (material_id, status, client_id, user_id, username, event_session_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)', [material.id, 'Available', clientId, user.id, user.username, activeSessionId, 'Bulk return']);
+
+                // 3. Remove the asset ID from the client's material_issues record
+                const itemName = material.name.toLowerCase();
+                if (itemName === 'table' || itemName === 'chair') {
+                    const assetIdSuffix = material.unique_id.slice(-4);
+                    const numberField = itemName === 'table' ? 'table_numbers' : 'chair_numbers';
+                    const issueRecord = await db.get(`SELECT id, ${numberField} FROM material_issues WHERE client_id = ? AND event_session_id = ? AND ${numberField} LIKE ?`, [clientId, activeSessionId, `%${assetIdSuffix}%`]);
+                    if (issueRecord && issueRecord[numberField]) {
+                        const numbers = issueRecord[numberField].split(',').map(s => s.trim());
+                        const updatedNumbers = numbers.filter(num => num !== assetIdSuffix).join(', ');
+                        await db.run(`UPDATE material_issues SET ${numberField} = ? WHERE id = ?`, [updatedNumbers, issueRecord.id]);
+                    }
+                }
+            }
+        });
+
+        await logAction(user.id, user.username, 'bulk_return_material', `Returned ${materialsToReturn.length} items for client #${clientId}.`, activeSessionId);
+        req.session.flash = { type: 'success', message: `Successfully returned all ${materialsToReturn.length} items.` };
+        res.redirect(redirectUrl);
     } catch (err) {
         console.error('Error during bulk return:', err.message);
         res.status(500).send('A server error occurred during the bulk return process.');

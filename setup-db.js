@@ -71,6 +71,7 @@ async function setupDatabase() {
       await run(`ALTER TABLE payments ADD COLUMN remarks TEXT`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
       await run(`ALTER TABLE material_stock ADD COLUMN event_session_id INTEGER REFERENCES event_sessions(id)`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
       await run(`ALTER TABLE material_history ADD COLUMN event_session_id INTEGER REFERENCES event_sessions(id)`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
+      await run(`ALTER TABLE material_history ADD COLUMN notes TEXT`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
       await run(`ALTER TABLE material_stock ADD COLUMN sequence INTEGER`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
       await run(`ALTER TABLE exhibition_details ADD COLUMN logo_path TEXT`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
       await run(`ALTER TABLE booking_edits ADD COLUMN rejection_reason TEXT`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
@@ -187,6 +188,7 @@ async function setupDatabase() {
         user_id INTEGER,
         username TEXT,
         client_id INTEGER,
+        notes TEXT,
         event_session_id INTEGER REFERENCES event_sessions(id),
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (material_id) REFERENCES material_stock(id) ON DELETE CASCADE,
@@ -218,6 +220,7 @@ async function setupDatabase() {
     bill_date TEXT,
     description TEXT,
     amount REAL,
+    event_session_id INTEGER REFERENCES event_sessions(id),
     FOREIGN KEY (booking_id) REFERENCES bookings(id)
   )`);
 
@@ -317,6 +320,18 @@ async function setupDatabase() {
         rejection_reason TEXT,
         user_notified INTEGER DEFAULT 0,
         FOREIGN KEY (electric_bill_id) REFERENCES electric_bills(id),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      )`);
+
+      await run(`CREATE TABLE IF NOT EXISTS write_offs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        booking_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        reason TEXT,
+        write_off_date DATE NOT NULL,
+        user_id INTEGER,
+        event_session_id INTEGER,
+        FOREIGN KEY (booking_id) REFERENCES bookings(id),
         FOREIGN KEY (user_id) REFERENCES users(id)
       )`);
 
@@ -446,7 +461,7 @@ async function setupDatabase() {
       // --- Add event_session_id to all operational tables ---
       console.log('Adding event_session_id to operational tables...');
       const tablesToUpdate = [
-        'bookings', 'payments', 'material_issues', 'material_stock', 'electric_bills', 'shed_bills', 'booking_staff',
+        'bookings', 'payments', 'material_issues', 'material_stock', 'electric_bills', 'shed_bills', 'booking_staff', 'write_offs',
         'shed_allocations', 'accounting_transactions', 'logs'
       ];
       for (const table of tablesToUpdate) {

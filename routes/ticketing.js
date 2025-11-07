@@ -141,15 +141,28 @@ router.get('/stock', async (req, res) => {
 
         stockSql += ' ORDER BY ts.entry_date DESC, ts.created_at DESC';
 
-        const [stock, categories] = await Promise.all([
+        const categorySummarySql = `
+            SELECT
+                tc.name as category_name,
+                SUM(ts.end_number - ts.start_number + 1) as available_tickets
+            FROM ticket_stock ts
+            JOIN ticket_categories tc ON ts.category_id = tc.id
+            WHERE ts.status = 'Available' AND ts.event_session_id = ?
+            GROUP BY tc.id, tc.name
+            ORDER BY tc.name
+        `;
+
+        const [stock, categories, categorySummary] = await Promise.all([
             all(stockSql, params),
-            all('SELECT * FROM ticket_categories ORDER BY name')
+            all('SELECT * FROM ticket_categories ORDER BY name'),
+            all(categorySummarySql, [res.locals.viewingSession.id])
         ]);
 
         res.render('ticketingStock', {
             title: 'Manage Ticket Stock',
             stock: stock || [],
             categories: categories || [],
+            categorySummary: categorySummary || [],
             filters: { category: category || 'all', status: status || 'all', q: q || '' }
         });
     } catch (err) {
@@ -275,9 +288,17 @@ router.post('/stock/edit/:id', async (req, res) => {
 // POST /ticketing/stock/delete/:id - Delete a stock item
 router.post('/stock/delete/:id', async (req, res) => {
     const { id } = req.params;
+    const activeSessionId = res.locals.activeSession.id;
     try {
-        // Add check here to prevent deleting stock that has been distributed
+        // Check to prevent deleting stock that has been distributed
+        const stockItem = await get('SELECT status FROM ticket_stock WHERE id = ?', [id]);
+        if (!stockItem || stockItem.status !== 'Available') {
+            req.session.flash = { type: 'danger', message: 'Cannot delete stock that is not marked as "Available".' };
+            return res.redirect('/ticketing/stock');
+        }
+
         await run('DELETE FROM ticket_stock WHERE id = ?', [id]);
+        await logAction(req.session.user.id, req.session.user.username, 'delete_ticket_stock', `Deleted ticket stock item #${id}`, activeSessionId);
         req.session.flash = { type: 'success', message: 'Stock item deleted.' };
     } catch (err) {
         console.error("Error deleting stock item:", err);

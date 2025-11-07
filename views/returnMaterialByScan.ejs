@@ -25,6 +25,11 @@
             <input type="text" class="form-control" id="uniqueId" placeholder="e.g., NCF/T/BLR/0001" autofocus>
           </div>
 
+          <div class="mb-3">
+            <label for="returnNotes" class="form-label">Notes (Optional, recommended for damaged items)</label>
+            <textarea class="form-control" id="returnNotes" rows="2"></textarea>
+          </div>
+
           <div class="d-grid gap-2">
             <button id="return-btn" class="btn btn-success"><i class="bi bi-check-circle me-2"></i>Return to Stock</button>
             <button id="damaged-btn" class="btn btn-danger"><i class="bi bi-exclamation-triangle me-2"></i>Mark as Damaged</button>
@@ -46,6 +51,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const returnBtn = document.getElementById('return-btn');
     const damagedBtn = document.getElementById('damaged-btn');
     const resultMessage = document.getElementById('result-message');
+    const returnNotesInput = document.getElementById('returnNotes');
     const startScanBtn = document.getElementById('start-scan-btn');
     const stopScanBtn = document.getElementById('stop-scan-btn');
     const readerDiv = document.getElementById('reader');
@@ -53,6 +59,7 @@ document.addEventListener('DOMContentLoaded', function() {
     async function handleReturn(status) {
         const uniqueId = uniqueIdInput.value.trim();
         if (!uniqueId) {
+            uniqueIdInput.focus();
             showMessage('Please enter a Unique ID.', 'warning');
             return;
         }
@@ -61,13 +68,15 @@ document.addEventListener('DOMContentLoaded', function() {
         returnBtn.disabled = true;
         damagedBtn.disabled = true;
 
+        const notes = returnNotesInput.value.trim();
+
         try {
             const response = await fetch('/materials/api/return-item', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ uniqueId, status }),
+                body: JSON.stringify({ uniqueId, status, notes }),
             });
 
             const result = await response.json();
@@ -75,6 +84,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (result.success) {
                 showMessage(result.message, 'success');
                 uniqueIdInput.value = ''; // Clear input on success
+                returnNotesInput.value = ''; // Clear notes on success
             } else {
                 showMessage(result.message, 'danger');
             }

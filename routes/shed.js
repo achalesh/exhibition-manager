@@ -167,29 +167,29 @@ router.post('/allocation/delete/:id', async (req, res) => {
     return res.redirect(`/booking/details-full/${allocation.booking_id}`);
   }
 
-  db.serialize(async () => {
-    try {
-      db.run('BEGIN TRANSACTION');
-
+  try {
+    let bookingIdToRedirect;
+    await transaction(async (db) => {
       // 1. Get the allocation details to find the shed and booking
-      const allocation = await get('SELECT * FROM shed_allocations WHERE id = ?', [allocationId]);
+      const allocation = await db.get('SELECT * FROM shed_allocations WHERE id = ?', [allocationId]);
       if (!allocation) throw new Error('Shed allocation not found.');
+      bookingIdToRedirect = allocation.booking_id;
 
       // 2. Get the shed's rent to subtract from the due amount
-      const shed = await get('SELECT rent FROM sheds WHERE id = ?', [allocation.shed_id]);
+      const shed = await db.get('SELECT rent FROM sheds WHERE id = ?', [allocation.shed_id]);
       if (!shed) throw new Error('Associated shed not found.');
 
-      // Delete the allocation record. We no longer touch the booking's due amount or the shed's static status.
-      await run('DELETE FROM shed_allocations WHERE id = ?', [allocationId]);
+      // 3. Subtract the shed rent from the booking's due amount
+      await db.run('UPDATE bookings SET due_amount = due_amount - ? WHERE id = ?', [shed.rent, allocation.booking_id]);
 
-      db.run('COMMIT');
-      res.redirect(`/booking/details-full/${allocation.booking_id}`);
-    } catch (err) {
-      db.run('ROLLBACK');
-      console.error(`Error deleting shed allocation #${allocationId}:`, err.message);
-      res.status(500).send('Failed to delete shed allocation.');
-    }
-  });
+      // 4. Delete the allocation record.
+      await db.run('DELETE FROM shed_allocations WHERE id = ?', [allocationId]);
+    });
+    res.redirect(`/booking/details-full/${bookingIdToRedirect}`);
+  } catch (err) {
+    console.error(`Error deleting shed allocation #${allocationId}:`, err.message);
+    res.status(500).send('Failed to delete shed allocation.');
+  }
 });
 
 // GET: Show form to add a miscellaneous shed bill

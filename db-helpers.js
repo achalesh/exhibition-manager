@@ -81,6 +81,9 @@ async function logAction(userId, username, action, details = null, event_session
  * @param {Function} callback - An async function containing the database operations.
  */
 async function transaction(callback) {
+  if (typeof callback !== 'function') {
+    throw new Error('Transaction callback must be a function.');
+  }
   try {
     await run('BEGIN TRANSACTION');
     await callback({ run, get, all }); // Pass helpers to the callback
