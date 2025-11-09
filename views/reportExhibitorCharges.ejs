@@ -1,0 +1,103 @@
+<%- include('partials/header') %>
+
+<div class="container-fluid mt-4">
+    <div class="d-none d-print-block text-center mb-4">
+        <h5><%= title %></h5>
+        <p>Printing Date: <%= new Date().toLocaleDateString('en-GB') %></p>
+    </div>
+    <div class="d-flex justify-content-between align-items-center mb-3 d-print-none">
+        <h1 class="h3"><%= title %></h1>
+        <div>
+            <button class="btn btn-outline-secondary" onclick="window.print()">
+                <i class="fas fa-print"></i> Print
+            </button>
+            <a href="/report/exhibitor-charges/csv?q=<%= filters.q %>" class="btn btn-outline-success">
+                <i class="fas fa-file-csv"></i> Download CSV
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-4 d-print-none">
+        <div class="card-body">
+            <form method="GET" action="/report/exhibitor-charges" class="row g-3 align-items-end">
+                <div class="col-md-8">
+                    <label for="q" class="form-label">Search Exhibitor, Facia, or Space</label>
+                    <input type="text" class="form-control" id="q" name="q" value="<%= filters.q %>">
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-primary">Filter</button>
+                    <a href="/report/exhibitor-charges" class="btn btn-secondary">Clear</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-bordered table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>#</th>
+                            <th>Exhibitor Name</th>
+                            <th>Facia Name</th>
+                            <th>Space</th>
+                            <th class="text-end">Rent</th>
+                            <th class="text-end">Electric</th>
+                            <th class="text-end">Material</th>
+                            <th class="text-end">Shed</th>
+                            <th class="text-end">Total Charged</th>
+                            <th class="text-end">Total Paid</th>
+                            <th class="text-end">Balance Due</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% exhibitors.forEach((exhibitor, index) => { %>
+                            <tr class="<%= exhibitor.balance_due > 0 ? 'table-danger' : '' %>">
+                                <td><%= index + 1 %></td>
+                                <td><a href="/booking/details-full/<%= exhibitor.booking_id %>"><%= exhibitor.exhibitor_name %></a></td>
+                                <td><%= exhibitor.facia_name || '-' %></td>
+                                <td><%= exhibitor.space_name %></td>
+                                <td class="text-end"><%= exhibitor.rent_charged.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                                <td class="text-end"><%= exhibitor.electric_charged.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                                <td class="text-end"><%= exhibitor.material_charged.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                                <td class="text-end"><%= exhibitor.shed_charged.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                                <td class="text-end"><%= exhibitor.total_charged.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                                <td class="text-end"><%= exhibitor.total_paid.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                                <td class="text-end fw-bold <%= exhibitor.balance_due > 0 ? 'text-danger' : 'text-success' %>"><%= exhibitor.balance_due.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                    <tbody class="table-group-divider">
+                        <tr class="fw-bold">
+                            <td colspan="4" class="text-end">Subtotal</td>
+                            <td class="text-end"><%= subtotal.rent_charged.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                            <td class="text-end"><%= subtotal.electric_charged.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                            <td class="text-end"><%= subtotal.material_charged.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                            <td class="text-end"><%= subtotal.shed_charged.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                            <td class="text-end"><%= subtotal.total_charged.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                            <td class="text-end"><%= subtotal.total_paid.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                            <td class="text-end"><%= subtotal.balance_due.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    @media print {
+        /* Force black and white printing */
+        *, *::before, *::after {
+            color: #000 !important;
+            background-color: #fff !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
+        }
+        .table { --bs-table-striped-bg: #fff; }
+    }
+</style>
+
+<%- include('partials/footer') %>
