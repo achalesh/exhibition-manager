@@ -1,43 +1,44 @@
 <%- include('partials/header') %>
 
-<div class="container mt-4">
-    <%- include('partials/ticketingNav') %>
+<div class="container-fluid mt-4">
+    <%- include('partials/ticketingSubNav') %>
 
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1><%= title %></h1>
-    </div>
+    <h1 class="h3 mb-3"><%= title %></h1>
 
     <!-- Summary Cards -->
-    <div class="row mb-4">
+    <div class="row">
         <div class="col-md-3">
-            <div class="card text-white bg-primary h-100">
+            <div class="card text-white bg-primary mb-3">
+                <div class="card-header">Total Tickets Sold</div>
                 <div class="card-body">
-                    <h5 class="card-title">Total Revenue</h5>
-                    <p class="card-text fs-4 fw-bold">₹<%= (summary.total_revenue || 0).toLocaleString('en-IN') %></p>
+                    <h4 class="card-title"><%= (summary.total_tickets_sold || 0).toLocaleString() %></h4>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card text-white bg-success h-100">
+            <div class="card text-white bg-success mb-3">
+                <div class="card-header">Total Revenue</div>
                 <div class="card-body">
-                    <h5 class="card-title">Tickets Sold</h5>
-                    <p class="card-text fs-4 fw-bold"><%= (summary.total_tickets_sold || 0).toLocaleString('en-IN') %></p>
+                    <h4 class="card-title">₹<%= (summary.total_revenue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></h4>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card text-dark bg-warning h-100">
-                <div class="card-body">
-                    <h5 class="card-title">Distributed Stock</h5>
-                    <p class="card-text fs-4 fw-bold"><%= (stockCounts.Distributed || 0).toLocaleString('en-IN') %> <small>books</small></p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-dark bg-light h-100">
-                <div class="card-body">
-                    <h5 class="card-title">Available Stock</h5>
-                    <p class="card-text fs-4 fw-bold"><%= (stockCounts.Available || 0).toLocaleString('en-IN') %> <small>books</small></p>
+        <div class="col-md-6">
+            <div class="card mb-3">
+                <div class="card-header">Stock Status</div>
+                <div class="card-body d-flex justify-content-around">
+                    <div class="text-center">
+                        <h5><%= (stockCounts.Available || 0).toLocaleString() %></h5>
+                        <p class="text-muted mb-0">Available</p>
+                    </div>
+                    <div class="text-center">
+                        <h5><%= (stockCounts.Distributed || 0).toLocaleString() %></h5>
+                        <p class="text-muted mb-0">Distributed</p>
+                    </div>
+                    <div class="text-center">
+                        <h5><%= (stockCounts.Settled || 0).toLocaleString() %></h5>
+                        <p class="text-muted mb-0">Settled</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -47,36 +48,22 @@
     <div class="row">
         <div class="col-md-6">
             <div class="card">
-                <div class="card-header">
-                    <h5>Top 5 Rides by Revenue</h5>
-                </div>
-                <div class="card-body">
-                    <ul class="list-group list-group-flush">
-                        <% topRides.forEach(ride => { %>
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                <%= ride.ride_name %>
-                                <span class="badge bg-primary rounded-pill">₹<%= ride.total_revenue.toLocaleString('en-IN') %></span>
-                            </li>
-                        <% }) %>
-                    </ul>
-                </div>
+                <div class="card-header">Top 5 Rides by Revenue</div>
+                <ul class="list-group list-group-flush">
+                    <% topRides.forEach(ride => { %>
+                        <li class="list-group-item d-flex justify-content-between"><span><%= ride.ride_name %></span> <strong>₹<%= ride.total_revenue.toLocaleString('en-IN') %></strong></li>
+                    <% }) %>
+                </ul>
             </div>
         </div>
         <div class="col-md-6">
             <div class="card">
-                <div class="card-header">
-                    <h5>Top 5 Staff by Revenue</h5>
-                </div>
-                <div class="card-body">
-                    <ul class="list-group list-group-flush">
-                        <% topStaff.forEach(staff => { %>
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                <%= staff.staff_name %>
-                                <span class="badge bg-success rounded-pill">₹<%= staff.total_revenue.toLocaleString('en-IN') %></span>
-                            </li>
-                        <% }) %>
-                    </ul>
-                </div>
+                <div class="card-header">Top 5 Staff by Revenue</div>
+                <ul class="list-group list-group-flush">
+                    <% topStaff.forEach(staff => { %>
+                        <li class="list-group-item d-flex justify-content-between"><span><%= staff.staff_name %></span> <strong>₹<%= staff.total_revenue.toLocaleString('en-IN') %></strong></li>
+                    <% }) %>
+                </ul>
             </div>
         </div>
     </div>

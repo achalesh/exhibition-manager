@@ -1,0 +1,74 @@
+<!-- Add Stock Modal -->
+<div class="modal fade" id="addStockModal" tabindex="-1" aria-labelledby="addStockModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="/ticketing/stock/add" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addStockModalLabel">Add Ticket Stock</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="category_id" class="form-label">Category</label>
+                        <select class="form-select" id="category_id" name="category_id" required>
+                            <option value="">Select a category</option>
+                            <% categories.forEach(cat => { %>
+                                <option value="<%= cat.id %>"><%= cat.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="rate" class="form-label">Rate</label>
+                        <input type="number" class="form-control" id="rate" name="rate" step="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="color" class="form-label">Color</label>
+                        <input type="color" class="form-control form-control-color" id="color" name="color" value="#563d7c" title="Choose your color">
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="start_number" class="form-label">Start Number</label>
+                            <input type="number" class="form-control" id="start_number" name="start_number" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="end_number" class="form-label">End Number</label>
+                            <input type="number" class="form-control" id="end_number" name="end_number" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="entry_date" class="form-label">Entry Date</label>
+                        <input type="date" class="form-control" id="entry_date" name="entry_date" value="<%= new Date().toISOString().split('T')[0] %>" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Add Stock</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Category Modal -->
+<div class="modal fade" id="addCategoryModal" tabindex="-1" aria-labelledby="addCategoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <form action="/ticketing/categories/add" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addCategoryModalLabel">Add Ticket Category</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Category Name</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Add Category</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

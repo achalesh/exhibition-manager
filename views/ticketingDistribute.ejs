@@ -1,195 +1,108 @@
 <%- include('partials/header') %>
 
-<div class="container mt-4">
-    <%- include('partials/ticketingNav') %> 
+<div class="container-fluid mt-4">
+    <%- include('partials/ticketingSubNav') %>
 
-    <div class="d-flex justify-content-between align-items-center mb-3 no-print">
-        <h1><%= title %></h1>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h3"><%= title %></h1>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#distributeModal">
+            <i class="fas fa-plus"></i> Distribute Tickets
+        </button>
     </div>
 
-    <!-- Filter Form -->
-    <div class="card mb-4 no-print">
-        <div class="card-header">
-            <h5 class="mb-0">
-                <button class="btn btn-link text-decoration-none text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse" aria-expanded="false" aria-controls="filterCollapse">
-                    <i class="bi bi-funnel"></i> Filter Distributions
-                </button>
-            </h5>
-        </div>
-        <div class="collapse" id="filterCollapse">
-            <div class="card-body bg-light">
-                <form action="/ticketing/distribute" method="GET" class="row g-3 align-items-end">
-                    <div class="col-md-3">
-                        <label for="filter-staff" class="form-label">Staff Member</label>
-                        <select id="filter-staff" name="staff_id" class="form-select">
-                            <option value="">All Staff</option>
-                            <% staff.forEach(s => { %>
-                                <option value="<%= s.id %>" <%= filters.staff_id == s.id ? 'selected' : '' %>><%= s.name %></option>
-                            <% }) %>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label for="filter-ride" class="form-label">Ride</label>
-                        <select id="filter-ride" name="ride_id" class="form-select">
-                            <option value="">All Rides</option>
-                            <% rides.forEach(r => { %>
-                                <option value="<%= r.id %>" <%= filters.ride_id == r.id ? 'selected' : '' %>><%= r.name %></option>
-                            <% }) %>
-                        </select>
-                    </div>
-                    <div class="col-md-2"><label for="start_date" class="form-label">Start Date</label><input type="date" name="start_date" id="start_date" class="form-control" value="<%= filters.start_date || '' %>"></div>
-                    <div class="col-md-2"><label for="end_date" class="form-label">End Date</label><input type="date" name="end_date" id="end_date" class="form-control" value="<%= filters.end_date || '' %>"></div>
-                    <div class="col-md-2"><button type="submit" class="btn btn-primary">Filter</button><a href="/ticketing/distribute" class="btn btn-secondary ms-2">Clear</a></div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <div class="row">
-        <!-- Distribution Form -->
-        <div class="col-md-4 no-print">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Distribute New Book</h5>
-                </div>
-                <div class="card-body">
-                    <form action="/ticketing/distribute" method="POST">
-                        <div class="mb-3">
-                            <label for="distribution_date" class="form-label">Distribution Date</label>
-                            <input type="date" class="form-control" id="distribution_date" name="distribution_date" value="<%= new Date().toISOString().split('T')[0] %>" required autofocus>
-                        </div>
-                        <div class="mb-3">
-                            <label for="staff_id" class="form-label">Staff Member</label>
-                            <select class="form-select" id="staff_id" name="staff_id" required>
-                                <option value="">-- Select Staff --</option>
-                                <% staff.forEach(s => { %>
-                                    <option value="<%= s.id %>"><%= s.name %></option>
-                                <% }) %>
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label for="ride_id" class="form-label">Ride</label>
-                            <select class="form-select" id="ride_id" name="ride_id" required>
-                                <option value="">-- Select Ride --</option>
-                                <% rides.forEach(r => { %>
-                                    <option value="<%= r.id %>"><%= r.name %> (₹<%= (r.rate || 0).toFixed(2) %>)</option>
-                                <% }) %>
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label for="stock_id" class="form-label">Ticket Stock</label>
-                            <select class="form-select" id="stock_id" name="stock_id" required>
-                                <option value="">-- Select Stock Book --</option>
-                                <% stock.forEach(item => { %>
-                                    <option value="<%= item.id %>">
-                                        <%= item.start_number %> - <%= item.end_number %> (Rate: ₹<%= item.rate.toFixed(2) %>, Color: <%= item.color %>)
-                                    </option>
-                                <% }) %>
-                            </select>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100">Distribute</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <!-- Currently Distributed Table -->
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Currently Distributed Tickets (Unsettled)</h5>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-striped table-hover">
-                            <thead>
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Staff</th>
-                                    <th>Ride</th>
-                                    <th class="text-end">Rate (₹)</th>
-                                    <th>Number Range</th>
-                                    <th class="text-end no-print">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <% const unsettled = distributions.filter(d => d.status === 'Distributed'); %>
-                                <% if (unsettled.length > 0) { %>
-                                    <% unsettled.forEach(dist => { %>
-                                        <% if (dist.status === 'Distributed') { %>
-                                            <tr>
-                                                <td><%= new Date(dist.distribution_date).toLocaleDateString() %></td>
-                                                <td><%= dist.staff_name %></td>
-                                                <td><%= dist.ride_name %></td>
-                                                <td class="text-end"><%= dist.rate.toFixed(2) %></td>
-                                                <td><%= dist.distributed_start_number %> - <%= dist.distributed_end_number %></td>
-                                                <td class="text-end no-print">
-                                                    <a href="/ticketing/settle/<%= dist.id %>" class="btn btn-sm btn-success">Settle</a>
-                                                    <form action="/ticketing/distribute/cancel/<%= dist.id %>" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to cancel this distribution? The stock will become available again.');">
-                                                        <button type="submit" class="btn btn-sm btn-outline-danger">Cancel</button>
-                                                    </form>
-                                                </td>
-                                            </tr>
-                                        <% } %>
-                                    <% }); %>
-                                <% } else { %>
-                                    <tr>
-                                        <td colspan="6" class="text-center text-muted">
-                                            No tickets are currently distributed.
-                                        </td>
-                                    </tr>
-                                <% } %>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Recently Settled Table -->
-    <div class="card mt-4">
-        <div class="card-header">
-            <h5>Recently Settled Tickets</h5>
-        </div>
+    <!-- Distributions Table -->
+    <div class="card">
         <div class="card-body">
             <div class="table-responsive">
-                <table class="table table-sm table-bordered">
-                    <thead class="table-light">
+                <table class="table table-striped table-hover">
+                    <thead>
                         <tr>
-                            <th>Settled Date</th>
+                            <th>Date</th>
                             <th>Staff</th>
-                            <th>Ride</th>
-                            <th>Number Range</th>
-                            <th class="text-end">Tickets Sold</th>
-                            <th class="text-end">Revenue (₹)</th>
-                            <th class="text-end no-print">Actions</th>
+                            <th>Ride/Rate</th>
+                            <th>Ticket # Range</th>
+                            <th>Status</th>
+                            <th>Settlement Date</th>
+                            <th class="text-end">Revenue</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <% const settled = distributions.filter(d => d.status === 'Settled'); %>
-                        <% if (settled.length > 0) { %>
-                            <% settled.forEach(dist => { %>
-                                <tr>
-                                    <td><%= new Date(dist.settlement_date).toLocaleDateString() %></td>
-                                    <td><%= dist.staff_name %></td>
-                                    <td><%= dist.ride_name %></td>
-                                    <td><%= dist.distributed_start_number %> - <%= dist.distributed_end_number %></td>
-                                    <td class="text-end"><%= dist.tickets_sold %></td>
-                                    <td class="text-end fw-bold"><%= dist.calculated_revenue.toFixed(2) %></td>
-                                    <td class="text-end no-print">
-                                        <form action="/ticketing/settle/revert/<%= dist.id %>" method="POST" class="d-inline" onsubmit="return confirm('WARNING: This will reverse the settlement and delete associated financial records. Are you absolutely sure?');">
-                                            <button type="submit" class="btn btn-sm btn-warning">Revert</button>
+                        <% distributions.forEach(dist => { %>
+                            <tr>
+                                <td><%= new Date(dist.distribution_date).toLocaleDateString('en-GB') %></td>
+                                <td><%= dist.staff_name %></td>
+                                <td><%= dist.ride_name %> @ <%= dist.rate.toFixed(2) %></td>
+                                <td><%= dist.distributed_start_number %> - <%= dist.distributed_end_number %></td>
+                                <td>
+                                    <span class="badge <%= dist.status === 'Distributed' ? 'bg-warning text-dark' : 'bg-success' %>">
+                                        <%= dist.status %>
+                                    </span>
+                                </td>
+                                <td><%= dist.settlement_date ? new Date(dist.settlement_date).toLocaleDateString('en-GB') : '-' %></td>
+                                <td class="text-end"><%= dist.calculated_revenue ? '₹' + dist.calculated_revenue.toLocaleString('en-IN') : '-' %></td>
+                                <td>
+                                    <% if (dist.status === 'Distributed') { %>
+                                        <a href="/ticketing/settle/<%= dist.id %>" class="btn btn-sm btn-success"><i class="fas fa-handshake"></i> Settle</a>
+                                        <form action="/ticketing/distribute/cancel/<%= dist.id %>" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to cancel this distribution?');">
+                                            <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-times"></i> Cancel</button>
                                         </form>
-                                    </td>
-                                </tr>
-                            <% }) %>
-                        <% } else { %>
-                            <tr><td colspan="7" class="text-center text-muted">No recent settlements.</td></tr>
+                                    <% } else { %>
+                                        <form action="/ticketing/settle/revert/<%= dist.id %>" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to revert this settlement? This will affect accounting records.');">
+                                            <button type="submit" class="btn btn-sm btn-outline-warning"><i class="fas fa-undo"></i> Revert</button>
+                                        </form>
+                                    <% } %>
+                                </td>
+                            </tr>
+                        <% }); %>
+                        <% if (distributions.length === 0) { %>
+                            <tr><td colspan="8" class="text-center">No distributions found.</td></tr>
                         <% } %>
                     </tbody>
                 </table>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Distribute Modal -->
+<div class="modal fade" id="distributeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="/ticketing/distribute" method="POST">
+                <div class="modal-header"><h5 class="modal-title">Distribute Tickets</h5></div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="staff_id" class="form-label">Staff Member</label>
+                        <select name="staff_id" class="form-select" required>
+                            <% staff.forEach(s => { %><option value="<%= s.id %>"><%= s.name %></option><% }); %>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="ride_id" class="form-label">Ride / Rate</label>
+                        <select name="ride_id" class="form-select" required>
+                            <% rides.forEach(r => { %><option value="<%= r.id %>"><%= r.name %> - ₹<%= r.rate.toFixed(2) %></option><% }); %>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="stock_id" class="form-label">Available Ticket Book</label>
+                        <select name="stock_id" class="form-select" required>
+                            <option value="">-- Select a ticket book --</option>
+                            <% stock.forEach(s => { %>
+                                <option value="<%= s.id %>">#<%= s.start_number %> - #<%= s.end_number %> (Rate: ₹<%= s.rate.toFixed(2) %>)</option>
+                            <% }); %>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="distribution_date" class="form-label">Distribution Date</label>
+                        <input type="date" name="distribution_date" class="form-control" value="<%= new Date().toISOString().split('T')[0] %>" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Distribute</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

@@ -143,11 +143,13 @@ router.get('/stock', async (req, res) => {
 
         const categorySummarySql = `
             SELECT
-                tc.name as category_name,
-                SUM(ts.end_number - ts.start_number + 1) as available_tickets
+              tc.name as category_name,
+              SUM(CASE WHEN ts.status = 'Available' THEN (ts.end_number - ts.start_number + 1) ELSE 0 END) as available_tickets,
+              SUM(CASE WHEN ts.status = 'Distributed' THEN (ts.end_number - ts.start_number + 1) ELSE 0 END) as distributed_tickets,
+              SUM(CASE WHEN ts.status = 'Settled' THEN (ts.end_number - ts.start_number + 1) ELSE 0 END) as settled_tickets
             FROM ticket_stock ts
             JOIN ticket_categories tc ON ts.category_id = tc.id
-            WHERE ts.status = 'Available' AND ts.event_session_id = ?
+            WHERE ts.event_session_id = ?
             GROUP BY tc.id, tc.name
             ORDER BY tc.name
         `;
@@ -158,11 +160,14 @@ router.get('/stock', async (req, res) => {
             all(categorySummarySql, [res.locals.viewingSession.id])
         ]);
 
+        const totalAvailableTickets = (categorySummary || []).reduce((sum, summary) => sum + summary.available_tickets, 0);
+
         res.render('ticketingStock', {
             title: 'Manage Ticket Stock',
             stock: stock || [],
             categories: categories || [],
             categorySummary: categorySummary || [],
+            totalAvailableTickets,
             filters: { category: category || 'all', status: status || 'all', q: q || '' }
         });
     } catch (err) {
@@ -303,6 +308,37 @@ router.post('/stock/delete/:id', async (req, res) => {
     } catch (err) {
         console.error("Error deleting stock item:", err);
         req.session.flash = { type: 'danger', message: 'Failed to delete stock item. It may be in use.' };
+    }
+    res.redirect('/ticketing/stock');
+});
+
+// POST /ticketing/stock/bulk-delete - Bulk delete stock items
+router.post('/stock/bulk-delete', async (req, res) => {
+    const { ids } = req.body;
+    const activeSessionId = res.locals.activeSession.id;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        req.session.flash = { type: 'danger', message: 'No stock items selected for deletion.' };
+        return res.redirect('/ticketing/stock');
+    }
+
+    try {
+        // Ensure all selected items are 'Available'
+        const placeholders = ids.map(() => '?').join(',');
+        const items = await all(`SELECT id, status FROM ticket_stock WHERE id IN (${placeholders})`, ids);
+
+        const nonDeletableItems = items.filter(item => item.status !== 'Available');
+        if (nonDeletableItems.length > 0) {
+            req.session.flash = { type: 'danger', message: 'Cannot delete stock that is not marked as "Available". Some selected items are already distributed or settled.' };
+            return res.redirect('/ticketing/stock');
+        }
+
+        await run(`DELETE FROM ticket_stock WHERE id IN (${placeholders})`, ids);
+        await logAction(req.session.user.id, req.session.user.username, 'bulk_delete_ticket_stock', `Bulk deleted ${ids.length} ticket stock items. IDs: ${ids.join(', ')}`, activeSessionId);
+        req.session.flash = { type: 'success', message: `${ids.length} stock item(s) deleted successfully.` };
+    } catch (err) {
+        console.error("Error bulk deleting stock items:", err);
+        req.session.flash = { type: 'danger', message: 'Failed to delete stock items.' };
     }
     res.redirect('/ticketing/stock');
 });

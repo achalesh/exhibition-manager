@@ -61,7 +61,7 @@ router.get('/materials', async (req, res) => {
     const defaults = await get('SELECT * FROM material_defaults WHERE id = 1');
     res.render('manageMaterialDefaults', {
       title: 'Manage Material Defaults',
-      defaults: defaults || { free_tables: 1, free_chairs: 2 },
+      defaults: defaults || { plywood_free: 0, table_free: 1, chair_free: 2, rod_free: 0 },
       report_url: '/settings/materials'
     });
   } catch (err) {
@@ -72,9 +72,12 @@ router.get('/materials', async (req, res) => {
 
 // POST: Update material defaults
 router.post('/materials', async (req, res) => {
-  const { free_tables, free_chairs } = req.body;
-  await run('UPDATE material_defaults SET free_tables = ?, free_chairs = ? WHERE id = 1', [free_tables, free_chairs]);
-  res.redirect('/material/issue');
+  const { plywood_free, table_free, chair_free, rod_free } = req.body;
+  await run('UPDATE material_defaults SET plywood_free = ?, table_free = ?, chair_free = ?, rod_free = ? WHERE id = 1', 
+    [plywood_free || 0, table_free || 0, chair_free || 0, rod_free || 0]
+  );
+  req.session.flash = { type: 'success', message: 'Material defaults updated successfully.' };
+  res.redirect('/settings/materials');
 });
 
 // GET /settings/backup-db - Download a backup of the database

@@ -1,19 +1,22 @@
 <%- include('partials/header') %>
 
-<div class="container mt-4">
-    <%- include('partials/ticketingNav') %>
+<div class="container-fluid mt-4">
+    <%- include('partials/ticketingSubNav') %>
 
-    <h1><%= title %></h1>
-    <p class="lead">Select a report to view detailed ticketing information.</p>
+    <h1 class="h3 mb-3"><%= title %></h1>
 
     <div class="list-group">
         <a href="/ticketing/report/daily-sales" class="list-group-item list-group-item-action">
-            <i class="bi bi-calendar-date me-2"></i> Daily Sales Report
+            Daily Sales Report
+        </a>
+        <a href="/report/sales-by-staff" class="list-group-item list-group-item-action">
+            Sales by Staff Report
         </a>
         <a href="/ticketing/report/staff-settlements" class="list-group-item list-group-item-action">
-            <i class="bi bi-people me-2"></i> Staff Settlements (Short/Excess)
+            Staff Settlements (Short/Excess) Report
         </a>
     </div>
+
 </div>
 
 <%- include('partials/footer') %>

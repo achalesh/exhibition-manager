@@ -239,8 +239,10 @@
                   <h6>Issue #<%= issue.sl_no || issue.id %> - Date: <%= new Date(issue.issue_date).toLocaleDateString() %></h6>
                   <div class="no-print d-flex gap-2">
                     <a href="/material/edit/<%= issue.id %>" class="btn btn-sm btn-primary <%= isReadOnly ? 'disabled' : '' %>">Edit</a>
-                    <form action="/material/delete/<%= issue.id %>" method="POST" onsubmit="return confirm('Are you sure you want to delete this material issue? This will reverse any charges.');">
-                      <button type="submit" class="btn btn-sm btn-danger" <%= isReadOnly ? 'disabled' : '' %>>Delete</button>
+                    <form action="/material/delete/<%= issue.id %>" method="POST" onsubmit="return confirm('Are you sure you want to return these materials? This will reverse any charges and delete the issue record.');">
+                      <button type="submit" class="btn btn-sm btn-warning" title="Return Materials" <%= isReadOnly ? 'disabled' : '' %>>
+                        <i class="bi bi-arrow-return-left"></i> Return
+                      </button>
                     </form>
                   </div>
                 </div>

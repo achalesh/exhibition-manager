@@ -1,116 +1,172 @@
 <%- include('partials/header') %>
 
 <div class="container mt-4">
-  <div class="row justify-content-center">
-    <div class="col-lg-8">
-      <div class="card shadow-sm">
-        <div class="card-header bg-primary text-white">
-          <h4 class="mb-0"><%= title %></h4>
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h1 class="h4 mb-0"><%= title %></h1>
+            <% if (issue.booking_id) { %>
+                <a href="/booking/details-full/<%= issue.booking_id %>" class="btn btn-secondary">
+                    <i class="fas fa-times"></i> Cancel
+                </a>
+            <% } %>
         </div>
         <div class="card-body">
-          <form action="/material/edit/<%= issue.id %>" method="POST">
-            <div class="row">
-              <div class="col-md-6 mb-3">
-                <label for="client_id" class="form-label">Client / Exhibitor</label>
-                <select id="client_id" name="client_id" class="form-select" required>
-                  <% clients.forEach(client => { %>
-                    <option value="<%= client.client_id %>" <%= issue.client_id == client.client_id ? 'selected' : '' %>>
-                      <%= client.client_name %> (<%= client.space_name %>)
-                    </option>
-                  <% }) %>
-                </select>
-              </div>
-              <div class="col-md-6 mb-3">
-                <label for="issue_date" class="form-label">Issue Date</label>
-                <input type="date" class="form-control" id="issue_date" name="issue_date" value="<%= new Date(issue.issue_date).toISOString().split('T')[0] %>" required>
-              </div>
-            </div>
+            <form action="/material/edit/<%= issue.id %>" method="POST" id="materialIssueForm">
+                <div class="row g-3">
+                    <!-- Client and Stall Info -->
+                    <div class="col-md-4">
+                        <label for="client_id" class="form-label">Client</label>
+                        <select name="client_id" id="client_id" class="form-select" required>
+                            <% clients.forEach(client => { %>
+                                <option value="<%= client.client_id %>" <%= issue.client_id == client.client_id ? 'selected' : '' %>>
+                                    <%= client.client_name %> (<%= client.facia_name %> - <%= client.space_name %>)
+                                </option>
+                            <% }) %>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="sl_no" class="form-label">SL No.</label>
+                        <input type="text" class="form-control" id="sl_no" name="sl_no" value="<%= issue.sl_no %>">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="stall_number" class="form-label">Stall Number</label>
+                        <input type="text" class="form-control" id="stall_number" name="stall_number" value="<%= issue.stall_number %>">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="camp" class="form-label">Camp</label>
+                        <input type="text" class="form-control" id="camp" name="camp" list="camp-suggestions" value="<%= issue.camp %>">
+                        <datalist id="camp-suggestions">
+                            <% suggestions.camps.forEach(camp => { %>
+                                <option value="<%= camp %>">
+                            <% }) %>
+                        </datalist>
+                    </div>
 
-            <div class="row">
-              <div class="col-md-6 mb-3">
-                <label for="sl_no" class="form-label">Serial Number</label>
-                <input type="text" class="form-control" id="sl_no" name="sl_no" value="<%= issue.sl_no || '' %>">
-              </div>
-              <div class="col-md-6 mb-3">
-                <label for="stall_number" class="form-label">Stall Number</label>
-                <input type="text" class="form-control" id="stall_number" name="stall_number" value="<%= issue.stall_number || '' %>">
-              </div>
-            </div>
+                    <!-- Free Items -->
+                    <h5 class="mt-4">Free Items</h5>
+                    <div class="col-md-3">
+                        <label for="plywood_free" class="form-label">Plywood</label>
+                        <input type="number" class="form-control" id="plywood_free" name="plywood_free" value="<%= issue.plywood_free || 0 %>">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="table_free" class="form-label">Tables</label>
+                        <input type="number" class="form-control" id="table_free" name="table_free" value="<%= issue.table_free || 0 %>">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="chair_free" class="form-label">Chairs</label>
+                        <input type="number" class="form-control" id="chair_free" name="chair_free" value="<%= issue.chair_free || 0 %>">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="rod_free" class="form-label">Rods</label>
+                        <input type="number" class="form-control" id="rod_free" name="rod_free" value="<%= issue.rod_free || 0 %>">
+                    </div>
 
-            <hr>
-            <h5 class="mb-3">Items Issued</h5>
+                    <!-- Paid Items -->
+                    <h5 class="mt-4">Paid Items</h5>
+                    <div class="col-md-4">
+                        <label for="plywood_paid" class="form-label">Plywood (₹<span id="plywood_rate_display"></span>)</label>
+                        <input type="number" class="form-control paid-item" id="plywood_paid" name="plywood_paid" value="<%= issue.plywood_paid || 0 %>" data-rate="300">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="table_paid" class="form-label">Tables (₹<span id="table_rate_display"></span>)</label>
+                        <input type="number" class="form-control paid-item" id="table_paid" name="table_paid" value="<%= issue.table_paid || 0 %>" data-rate="600">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="chair_paid" class="form-label">Chairs (₹<span id="chair_rate_display"></span>)</label>
+                        <input type="number" class="form-control paid-item" id="chair_paid" name="chair_paid" value="<%= issue.chair_paid || 0 %>" data-rate="100">
+                    </div>
 
-            <div class="row">
-              <div class="col-md-6">
-                <h6>Free Items</h6>
-                <div class="input-group mb-2">
-                  <span class="input-group-text" style="width: 80px;">Plywood</span>
-                  <input type="number" class="form-control" name="plywood_free" value="<%= issue.plywood_free || 0 %>">
+                    <!-- Item Numbers -->
+                    <h5 class="mt-4">Item Numbers</h5>
+                    <div class="col-md-6">
+                        <label for="table_numbers" class="form-label">Table Numbers</label>
+                        <input type="text" class="form-control" id="table_numbers" name="table_numbers" value="<%= issue.table_numbers %>">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="chair_numbers" class="form-label">Chair Numbers</label>
+                        <input type="text" class="form-control" id="chair_numbers" name="chair_numbers" value="<%= issue.chair_numbers %>">
+                    </div>
+
+                    <!-- Financials -->
+                    <h5 class="mt-4">Financials</h5>
+                    <div class="col-md-4">
+                        <label for="total_payable" class="form-label">Total Payable</label>
+                        <input type="number" class="form-control" id="total_payable" name="total_payable" value="<%= issue.total_payable || 0 %>" readonly>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="advance_paid" class="form-label">Advance Paid</label>
+                        <input type="number" class="form-control" id="advance_paid" name="advance_paid" value="<%= issue.advance_paid || 0 %>">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="balance_due" class="form-label">Balance Due</label>
+                        <input type="number" class="form-control" id="balance_due" name="balance_due" value="<%= issue.balance_due || 0 %>" readonly>
+                    </div>
+
+                    <!-- Notes and Date -->
+                    <div class="col-md-6">
+                        <label for="notes" class="form-label">Notes</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="3"><%= issue.notes %></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="issue_date" class="form-label">Issue Date</label>
+                        <input type="date" class="form-control" id="issue_date" name="issue_date" value="<%= issue.issue_date %>" required>
+                    </div>
                 </div>
-                <div class="input-group mb-2">
-                  <span class="input-group-text" style="width: 80px;">Table</span>
-                  <input type="number" class="form-control" name="table_free" value="<%= issue.table_free || 0 %>">
-                </div>
-                <div class="input-group mb-2">
-                  <span class="input-group-text" style="width: 80px;">Chair</span>
-                  <input type="number" class="form-control" name="chair_free" value="<%= issue.chair_free || 0 %>">
-                </div>
-                <div class="input-group mb-2">
-                  <span class="input-group-text" style="width: 80px;">Rod</span>
-                  <input type="number" class="form-control" name="rod_free" value="<%= issue.rod_free || 0 %>">
-                </div>
-              </div>
-              <div class="col-md-6">
-                <h6>Paid Items</h6>
-                <div class="input-group mb-2">
-                  <span class="input-group-text" style="width: 80px;">Plywood</span>
-                  <input type="number" class="form-control" name="plywood_paid" value="<%= issue.plywood_paid || 0 %>">
-                </div>
-                <div class="input-group mb-2">
-                  <span class="input-group-text" style="width: 80px;">Table</span>
-                  <input type="number" class="form-control" name="table_paid" value="<%= issue.table_paid || 0 %>">
-                </div>
-                <div class="input-group mb-2">
-                  <span class="input-group-text" style="width: 80px;">Chair</span>
-                  <input type="number" class="form-control" name="chair_paid" value="<%= issue.chair_paid || 0 %>">
-                </div>
-              </div>
-            </div>
 
-            <hr>
-
-            <div class="mb-3">
-              <label for="table_numbers" class="form-label">Table Numbers</label>
-              <input type="text" class="form-control" id="table_numbers" name="table_numbers" value="<%= issue.table_numbers || '' %>">
-            </div>
-            <div class="mb-3">
-              <label for="chair_numbers" class="form-label">Chair Numbers</label>
-              <input type="text" class="form-control" id="chair_numbers" name="chair_numbers" value="<%= issue.chair_numbers || '' %>">
-            </div>
-
-            <hr>
-
-            <div class="row">
-              <div class="col-md-4 mb-3">
-                <label for="total_payable" class="form-label">Total Payable (₹)</label>
-                <input type="number" class="form-control" id="total_payable" name="total_payable" value="<%= issue.total_payable || 0 %>">
-              </div>
-            </div>
-
-            <div class="mb-3">
-              <label for="notes" class="form-label">Notes</label>
-              <textarea class="form-control" id="notes" name="notes" rows="3"><%= issue.notes || '' %></textarea>
-            </div>
-
-            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-              <a href="/booking/details-full/<%= issue.booking_id %>" class="btn btn-secondary">Cancel</a>
-              <button type="submit" class="btn btn-primary">Save Changes</button>
-            </div>
-          </form>
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">Update Issue</button>
+                </div>
+            </form>
         </div>
-      </div>
     </div>
-  </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('materialIssueForm');
+    const paidItems = form.querySelectorAll('.paid-item');
+    const totalPayableInput = document.getElementById('total_payable');
+    const advancePaidInput = document.getElementById('advance_paid');
+    const balanceDueInput = document.getElementById('balance_due');
+
+    // Function to update the rate display spans
+    function updateRateDisplays() {
+        paidItems.forEach(item => {
+            const rate = item.dataset.rate;
+            const displayId = `${item.id.replace('_paid', '')}_rate_display`;
+            const displaySpan = document.getElementById(displayId);
+            if (displaySpan) {
+                displaySpan.textContent = rate;
+            }
+        });
+    }
+
+    // Function to calculate and update totals
+    function updateTotals() {
+        let totalPayable = 0;
+        paidItems.forEach(item => {
+            const quantity = parseInt(item.value, 10) || 0;
+            const rate = parseFloat(item.dataset.rate) || 0;
+            totalPayable += quantity * rate;
+        });
+
+        const advancePaid = parseFloat(advancePaidInput.value) || 0;
+        const balanceDue = totalPayable - advancePaid;
+
+        totalPayableInput.value = totalPayable.toFixed(2);
+        balanceDueInput.value = balanceDue.toFixed(2);
+    }
+
+    // Add event listeners to all paid item inputs and the advance paid input
+    paidItems.forEach(item => {
+        item.addEventListener('input', updateTotals);
+    });
+    advancePaidInput.addEventListener('input', updateTotals);
+
+    // Initial setup
+    updateRateDisplays();
+    updateTotals(); // Calculate totals on page load
+});
+</script>
 
 <%- include('partials/footer') %>

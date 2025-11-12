@@ -78,6 +78,12 @@ async function setupDatabase() {
       await run(`ALTER TABLE booking_edits ADD COLUMN user_notified INTEGER DEFAULT 0`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
       await run(`ALTER TABLE bookings ADD COLUMN booking_status TEXT DEFAULT 'active'`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
       await run(`ALTER TABLE bookings ADD COLUMN vacated_date DATE`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
+      // Add missing columns to material_defaults if it exists
+      await run(`ALTER TABLE material_defaults ADD COLUMN plywood_free INTEGER DEFAULT 0`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
+      await run(`ALTER TABLE material_defaults ADD COLUMN rod_free INTEGER DEFAULT 0`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
+      await run(`ALTER TABLE material_defaults ADD COLUMN table_free INTEGER DEFAULT 0`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
+      await run(`ALTER TABLE material_defaults ADD COLUMN chair_free INTEGER DEFAULT 0`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
+
       // Add the missing tables if they don't exist
 
       await run(`CREATE TABLE IF NOT EXISTS payment_edits (
@@ -167,6 +173,15 @@ async function setupDatabase() {
     issue_date TEXT DEFAULT CURRENT_DATE,
     FOREIGN KEY (client_id) REFERENCES clients(id)
   )`);
+
+      await run(`CREATE TABLE IF NOT EXISTS material_defaults (
+        id INTEGER PRIMARY KEY,
+        plywood_free INTEGER DEFAULT 0,
+        table_free INTEGER DEFAULT 0,
+        chair_free INTEGER DEFAULT 0,
+        rod_free INTEGER DEFAULT 0
+      )`);
+      await run(`INSERT OR IGNORE INTO material_defaults (id, plywood_free, table_free, chair_free, rod_free) VALUES (1, 1, 1, 2, 0)`);
 
       await run(`CREATE TABLE IF NOT EXISTS material_stock (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

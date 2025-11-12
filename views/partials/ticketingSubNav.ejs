@@ -1,29 +1,17 @@
-<% if (user && (user.role === 'admin' || user.role === 'ticketing_manager')) { %>
-<nav class="nav nav-pills flex-column flex-sm-row nav-fill mb-4 shadow-sm p-2 bg-light rounded">
-    <a class="flex-sm-fill text-sm-center nav-link <%= (currentPath === '/ticketing' || currentPath.startsWith('/ticketing/import')) ? 'active' : '' %>" href="/ticketing">
-        <i class="bi bi-bar-chart-line me-1 d-none d-md-inline"></i> Dashboard
-    </a>
-    <a class="flex-sm-fill text-sm-center nav-link <%= currentPath.startsWith('/ticketing/stock') ? 'active' : '' %>" href="/ticketing/stock">
-        <i class="bi bi-stack me-1 d-none d-md-inline"></i> Stock
-    </a>
-    <a class="flex-sm-fill text-sm-center nav-link <%= currentPath.startsWith('/ticketing/distribute') ? 'active' : '' %>" href="/ticketing/distribute">
-        <i class="bi bi-send me-1 d-none d-md-inline"></i> Distribute
-    </a>
-    <a class="flex-sm-fill text-sm-center nav-link <%= currentPath.startsWith('/ticketing/settle') ? 'active' : '' %>" href="/ticketing/settle">
-        <i class="bi bi-receipt-cutoff me-1 d-none d-md-inline"></i> Settle
-    </a>
-    <a class="flex-sm-fill text-sm-center nav-link <%= currentPath.startsWith('/ticketing/rides') ? 'active' : '' %>" href="/ticketing/rides">
-        <i class="bi bi-joystick me-1 d-none d-md-inline"></i> Rides
-    </a>
-    <div class="nav-item dropdown flex-sm-fill">
-        <a class="nav-link dropdown-toggle text-sm-center <%= currentPath.startsWith('/ticketing/report') ? 'active' : '' %>" href="#" id="ticketingReportsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-            <i class="bi bi-clipboard-data me-1 d-none d-md-inline"></i> Reports
-        </a>
-        <ul class="dropdown-menu" aria-labelledby="ticketingReportsDropdown">
-            <li><a class="dropdown-item" href="/ticketing/report/daily">Daily Sales</a></li>
-            <li><a class="dropdown-item" href="/ticketing/report/stock">Stock Status</a></li>
-            <li><a class="dropdown-item" href="/ticketing/report/staff-accounts">Staff Accounts</a></li>
-        </ul>
-    </div>
-</nav>
-<% } %>
+<ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+        <a class="nav-link <%= currentPath === '/ticketing' || currentPath === '/ticketing/' ? 'active' : '' %>" href="/ticketing">Dashboard</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link <%= currentPath.startsWith('/ticketing/stock') || currentPath.startsWith('/ticketing/edit') ? 'active' : '' %>" href="/ticketing/stock">Manage Stock</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link <%= currentPath.startsWith('/ticketing/distribute') || currentPath.startsWith('/ticketing/settle') ? 'active' : '' %>" href="/ticketing/distribute">Distribute & Settle</a>
+    </li>
+     <li class="nav-item">
+        <a class="nav-link <%= currentPath.startsWith('/ticketing/rides') ? 'active' : '' %>" href="/ticketing/rides">Manage Rides</a>
+    </li>
+     <li class="nav-item">
+        <a class="nav-link <%= currentPath.startsWith('/ticketing/report') ? 'active' : '' %>" href="/ticketing/report">Reports</a>
+    </li>
+</ul>

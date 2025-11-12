@@ -16,7 +16,7 @@ router.get('/issue', async (req, res) => {
       `),
       get('SELECT * FROM material_defaults WHERE id = 1'),
       get('SELECT GROUP_CONCAT(DISTINCT camp) as camps FROM material_issues WHERE camp IS NOT NULL')
-    ]);
+    ]); 
 
     const campSuggestions = suggestions?.camps ? suggestions.camps.split(',') : [];
 
@@ -24,7 +24,7 @@ router.get('/issue', async (req, res) => {
       title: 'Issue Stall Materials',
       clients: clients || [],
       suggestions: {
-        defaults: defaults || { free_tables: 1, free_chairs: 2 },
+        defaults: defaults || { plywood_free: 0, table_free: 0, chair_free: 0, rod_free: 0 }, // Ensure all defaults are present
         camps: campSuggestions
       },
       selectedClientId // Pass it to the view
@@ -283,6 +283,48 @@ router.post('/reject/:edit_id', isAdmin, async (req, res) => {
     const { rejection_reason } = req.body;
     await run(`UPDATE material_issue_edits SET status = 'rejected', rejection_reason = ? WHERE id = ?`, [rejection_reason, editId]);
     res.redirect('/dashboard?message=Material issue edit has been rejected.');
+});
+
+// GET API: Get free item defaults based on client's booking type
+router.get('/api/get-client-free-item-defaults/:clientId', async (req, res) => {
+    const clientId = req.params.clientId;
+    const viewingSessionId = res.locals.viewingSession.id;
+
+    try {
+        // Fetch the space type for the client's active booking
+        const booking = await get(`
+            SELECT s.type as space_type
+            FROM bookings b
+            JOIN spaces s ON b.space_id = s.id
+            WHERE b.client_id = ? AND b.event_session_id = ? AND b.booking_status = 'active'
+        `, [clientId, viewingSessionId]);
+
+        const spaceType = booking?.space_type?.toLowerCase();
+
+        // Fetch global material defaults
+        const globalDefaults = await get('SELECT * FROM material_defaults WHERE id = 1');
+
+        let plywood_free = globalDefaults?.plywood_free || 0;
+        let table_free = globalDefaults?.table_free || 0;
+        let chair_free = globalDefaults?.chair_free || 0;
+        let rod_free = globalDefaults?.rod_free || 0;
+
+        // Adjust defaults based on space type
+        if (spaceType === 'pavilion') {
+            table_free = Math.max(table_free, 2); // Example: Pavilions get at least 2 free tables
+            chair_free = Math.max(chair_free, 4); // Example: Pavilions get at least 4 free chairs
+        } else if (spaceType === 'stall') {
+            table_free = Math.max(table_free, 1); // Example: Stalls get at least 1 free table
+            chair_free = Math.max(chair_free, 2); // Example: Stalls get at least 2 free chairs
+        }
+        // You can add more specific logic for other space types if needed
+
+        res.json({ plywood_free, table_free, chair_free, rod_free });
+
+    } catch (err) {
+        console.error('Error fetching free item defaults:', err.message);
+        res.status(500).json({ error: 'Failed to fetch defaults.' });
+    }
 });
 
 module.exports = router;
