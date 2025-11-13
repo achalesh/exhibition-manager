@@ -1,0 +1,44 @@
+<%- include('partials/header') %>
+
+<div class="container mt-4">
+    <div class="card mx-auto" style="max-width: 700px;">
+        <div class="card-header">
+            <h1 class="h3 mb-0"><%= title %></h1>
+        </div>
+        <div class="card-body">
+            <p>You are creating a new, unallocated booking for the following exhibitor in a new session. All financial details will be reset for the new booking.</p>
+            
+            <div class="mb-4">
+                <h5>Exhibitor Details</h5>
+                <p class="mb-1"><strong>Name:</strong> <%= booking.exhibitor_name %></p>
+                <p class="mb-1"><strong>Contact:</strong> <%= booking.contact_person %> (<%= booking.contact_number %>)</p>
+            </div>
+
+            <form action="/booking/rebook/<%= booking.id %>" method="POST">
+                <div class="mb-3">
+                    <label for="target_session_id" class="form-label">Select Target Session <span class="text-danger">*</span></label>
+                    <select class="form-select" id="target_session_id" name="target_session_id" required>
+                        <option value="">-- Choose a session --</option>
+                        <% sessions.forEach(session => { %>
+                            <option value="<%= session.id %>"><%= session.name %> (<%= session.status %>)</option>
+                        <% }) %>
+                    </select>
+                    <div class="form-text">
+                        The new booking will be created in this session.
+                    </div>
+                </div>
+
+                <div class="alert alert-info">
+                    The new booking will be created with a status of <strong>Unallocated</strong>. You will need to allocate a space to them in the new session to complete the process.
+                </div>
+
+                <div class="d-flex justify-content-end">
+                    <a href="/booking/details-full/<%= booking.id %>" class="btn btn-secondary me-2">Cancel</a>
+                    <button type="submit" class="btn btn-primary">Confirm Re-booking</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<%- include('partials/footer') %>

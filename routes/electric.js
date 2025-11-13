@@ -21,16 +21,12 @@ router.get('/add', async (req, res) => {
   try {
     const [bookings, items] = await Promise.all([
       all(`
-        SELECT b.id, b.exhibitor_name, b.facia_name, s.name as space_name
+        SELECT b.id, b.exhibitor_name, b.facia_name, s.space_name
         FROM bookings b
-        JOIN spaces s ON b.space_id = s.id
-        ORDER BY
-          CASE s.type
-            WHEN 'Pavilion' THEN 1
-            WHEN 'Stall' THEN 2
-            WHEN 'Booth' THEN 3
-            ELSE 4
-          END, s.name
+        LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s 
+        ON b.id = s.booking_id
+        WHERE b.booking_status = 'active'
+        ORDER BY b.id DESC
       `),
       all('SELECT * FROM electric_items ORDER BY name')
     ]);
@@ -95,10 +91,11 @@ router.get('/edit/:id', async (req, res) => {
 
     const [bookings, items] = await Promise.all([
       all(`
-        SELECT b.id, b.exhibitor_name, b.facia_name, s.name as space_name
-        FROM bookings b JOIN spaces s ON b.space_id = s.id
-        WHERE s.status = 'Booked' OR b.id = ?
-        ORDER BY CASE s.type WHEN 'Pavilion' THEN 1 WHEN 'Stall' THEN 2 WHEN 'Booth' THEN 3 ELSE 4 END, s.name
+        SELECT b.id, b.exhibitor_name, b.facia_name, s.space_name
+        FROM bookings b 
+        LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s 
+        ON b.id = s.booking_id
+        WHERE b.booking_status = 'active' OR b.id = ?
       `, [bill.booking_id]),
       all('SELECT * FROM electric_items ORDER BY name')
     ]);

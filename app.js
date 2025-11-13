@@ -123,20 +123,31 @@ app.get('/dashboard', isAuthenticated, (req, res, next) => {
     }
 
     // --- Space/Stall Summary Queries (now session-aware) ---
-    const categoryQuery = 'SELECT type, COUNT(*) as count FROM spaces GROUP BY type';
-    const totalQuery = 'SELECT COUNT(*) as count FROM spaces';
-    const bookedSpacesQuery = get("SELECT COUNT(DISTINCT space_id) as count FROM bookings WHERE event_session_id = ? AND booking_status = 'active'", [viewingSessionId]);
+    const categoryQuery = 'SELECT type, COUNT(*) as count FROM spaces WHERE is_active = 1 GROUP BY type';
+    const totalQuery = 'SELECT COUNT(*) as count FROM spaces WHERE is_active = 1';
+    const bookedSpacesQuery = get("SELECT COUNT(DISTINCT bs.space_id) as count FROM booking_spaces bs JOIN bookings b ON bs.booking_id = b.id WHERE b.event_session_id = ? AND b.booking_status = 'active'", [viewingSessionId]);
+    const unallocatedBookingsQuery = get("SELECT COUNT(*) as count FROM bookings WHERE event_session_id = ? AND booking_status = 'unallocated'", [viewingSessionId]);
     const spacesQuery = `
       SELECT 
         s.*, 
         b.facia_name,
-        CASE WHEN b.space_id IS NOT NULL THEN 'Booked' ELSE 'Available' END as session_status
+        b.exhibitor_name,
+        b.booking_id,
+        CASE WHEN b.booking_id IS NOT NULL THEN 'Booked' ELSE 'Available' END as session_status
       FROM spaces s
       LEFT JOIN (
-        SELECT space_id, facia_name FROM bookings 
-        WHERE event_session_id = ? AND booking_status = 'active'
+        SELECT b.id as booking_id, bs.space_id, b.facia_name, b.exhibitor_name 
+        FROM bookings b JOIN booking_spaces bs ON b.id = bs.booking_id 
+        WHERE b.event_session_id = ? AND b.booking_status = 'active'
       ) b ON s.id = b.space_id
-      ORDER BY s.type, s.name;
+      WHERE s.is_active = 1
+      ORDER BY 
+        CASE s.type
+          WHEN 'Pavilion' THEN 1
+          WHEN 'Stall' THEN 2
+          WHEN 'Booth' THEN 3
+          ELSE 4
+        END, s.name;
     `;
 
     // --- Financial Summary Queries ---
@@ -177,6 +188,7 @@ app.get('/dashboard', isAuthenticated, (req, res, next) => {
       categories, 
       total, 
       bookedSpacesResult,
+      unallocatedBookingsResult,
       allSpaces,
       rentStats,
       advanceStats,
@@ -190,9 +202,10 @@ app.get('/dashboard', isAuthenticated, (req, res, next) => {
       all(categoryQuery),
       get(totalQuery),
       bookedSpacesQuery,
+      unallocatedBookingsQuery,
       all(spacesQuery, [viewingSessionId]),
       ...financialQueries,
-      all('SELECT timestamp, username, action, details FROM logs WHERE event_session_id = ? ORDER BY timestamp DESC LIMIT 10', [viewingSessionId])
+      all('SELECT timestamp, username, action, details FROM logs WHERE event_session_id = ? ORDER BY timestamp DESC LIMIT 5', [viewingSessionId])
     ]);
 
     const categoryCounts = (categories || []).reduce((acc, row) => {
@@ -202,7 +215,8 @@ app.get('/dashboard', isAuthenticated, (req, res, next) => {
 
     const totalSpacesCount = total ? total.count : 0;
     const bookedCount = bookedSpacesResult ? bookedSpacesResult.count : 0;
-    const statusCounts = { Booked: bookedCount, Available: totalSpacesCount - bookedCount };
+    const unallocatedCount = unallocatedBookingsResult ? unallocatedBookingsResult.count : 0;
+    const statusCounts = { Booked: bookedCount, Available: totalSpacesCount - bookedCount, Unallocated: unallocatedCount };
 
     // Group spaces by type for the layout view
     const spacesByType = (allSpaces || []).reduce((acc, space) => {
@@ -244,6 +258,18 @@ app.get('/dashboard', isAuthenticated, (req, res, next) => {
       cat.dueFormatted = formatCurrency(cat.due);
     });
 
+    // Calculate and format grand totals
+    financials.total = {
+      charged: financials.rent.charged + financials.electric.charged + financials.material.charged + financials.shed.charged,
+      paid: financials.rent.paid + financials.electric.paid + financials.material.paid + financials.shed.paid,
+    };
+    financials.total.due = financials.total.charged - financials.total.paid;
+
+    financials.total.chargedFormatted = formatCurrency(financials.total.charged);
+    financials.total.paidFormatted = formatCurrency(financials.total.paid);
+    financials.total.dueFormatted = formatCurrency(financials.total.due);
+
+
     res.render('dashboard', {
       title: 'Dashboard',
       totalSpaces: totalSpacesCount,
@@ -275,13 +301,12 @@ app.post('/dashboard/search', isAuthenticated, async (req, res) => {
   try {
     const searchSql = `
       SELECT b.id
-      FROM bookings b
-      JOIN spaces s ON b.space_id = s.id
+      FROM bookings b LEFT JOIN booking_spaces bs ON b.id = bs.booking_id LEFT JOIN spaces s ON bs.space_id = s.id
       WHERE b.event_session_id = ? AND (
         b.exhibitor_name LIKE ? OR
         b.facia_name LIKE ? OR
         s.name LIKE ?
-      )
+      ) GROUP BY b.id
     `;
     const results = await all(searchSql, [viewingSessionId, `%${q}%`, `%${q}%`, `%${q}%`]);
 

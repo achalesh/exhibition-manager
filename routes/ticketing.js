@@ -108,9 +108,20 @@ router.post('/rides/update/:id', async (req, res) => {
 
 // POST /ticketing/rides/delete/:id - Delete a ride
 router.post('/rides/delete/:id', async (req, res) => {
-    // Note: Add checks here to prevent deleting rides that are in use.
-    await run('DELETE FROM rides WHERE id = ?', [req.params.id]);
-    req.session.flash = { type: 'success', message: 'Ride deleted.' };
+    const rideId = req.params.id;
+    try {
+        // Check if the ride is used in any ticket distributions
+        const distribution = await get('SELECT id FROM ticket_distributions WHERE rate_id = ?', [rideId]);
+        if (distribution) {
+            req.session.flash = { type: 'danger', message: 'Cannot delete ride. It is already used in ticket distributions.' };
+            return res.redirect('/ticketing/rides');
+        }
+        await run('DELETE FROM rides WHERE id = ?', [rideId]);
+        req.session.flash = { type: 'success', message: 'Ride deleted.' };
+    } catch (err) {
+        console.error("Error deleting ride:", err);
+        req.session.flash = { type: 'danger', message: 'Failed to delete ride.' };
+    }
     res.redirect('/ticketing/rides');
 });
 
@@ -433,6 +444,33 @@ router.post('/distribute', async (req, res) => {
     res.redirect('/ticketing/distribute');
 });
 
+// Helper function for daily sales report to avoid code duplication
+async function getDailySalesData(viewingSessionId, startDate, endDate) {
+    let sql = `
+      SELECT
+        settlement_date,
+        SUM(tickets_sold) as total_tickets_sold,
+        SUM(calculated_revenue) as total_revenue,
+        SUM(cash_amount) as total_cash,
+        SUM(upi_amount) as total_upi
+      FROM ticket_distributions
+    `;
+
+    const whereClauses = ["status = 'Settled'", "event_session_id = ?"];
+    const params = [viewingSessionId];
+
+    if (startDate) {
+        whereClauses.push('settlement_date >= ?');
+        params.push(startDate);
+    }
+    if (endDate) {
+        whereClauses.push('settlement_date <= ?');
+        params.push(endDate);
+    }
+    sql += ` WHERE ${whereClauses.join(' AND ')} GROUP BY settlement_date ORDER BY settlement_date DESC`;
+    return await all(sql, params);
+}
+
 // --- TICKETING REPORTS ---
 
 // GET /ticketing/report - Main reports menu for ticketing
@@ -502,32 +540,8 @@ router.get('/report/daily-sales', async (req, res) => {
     try {
         const viewingSessionId = res.locals.viewingSession.id;
         const { start_date, end_date } = req.query;
-
-        let sql = `
-      SELECT
-        settlement_date,
-        SUM(tickets_sold) as total_tickets_sold,
-        SUM(calculated_revenue) as total_revenue,
-        SUM(cash_amount) as total_cash,
-        SUM(upi_amount) as total_upi
-      FROM ticket_distributions
-    `;
-
-        const whereClauses = ["status = 'Settled'", "event_session_id = ?"];
-        const params = [viewingSessionId];
-
-        if (start_date) {
-            whereClauses.push('settlement_date >= ?');
-            params.push(start_date);
-        }
-        if (end_date) {
-            whereClauses.push('settlement_date <= ?');
-            params.push(end_date);
-        }
-
-        sql += ` WHERE ${whereClauses.join(' AND ')} GROUP BY settlement_date ORDER BY settlement_date DESC`;
-
-        const dailySales = await all(sql, params);
+        
+        const dailySales = await getDailySalesData(viewingSessionId, start_date, end_date);
 
         res.render('reportDailyTicketSales', {
             title: 'Daily Ticket Sales Report',
@@ -545,18 +559,9 @@ router.get('/report/daily-sales', async (req, res) => {
 router.get('/report/daily-sales/csv', async (req, res) => {
     try {
         const viewingSessionId = res.locals.viewingSession.id;
-        const sql = `
-      SELECT
-        settlement_date,
-        SUM(tickets_sold) as total_tickets_sold,
-        SUM(calculated_revenue) as total_revenue,
-        SUM(cash_amount) as total_cash,
-        SUM(upi_amount) as total_upi
-      FROM ticket_distributions
-      WHERE status = 'Settled' AND event_session_id = ?
-      GROUP BY settlement_date ORDER BY settlement_date DESC
-    `;
-        const dailySales = await all(sql, [viewingSessionId]);
+        const { start_date, end_date } = req.query; // Also apply filters to CSV
+
+        const dailySales = await getDailySalesData(viewingSessionId, start_date, end_date);
 
         const json2csvParser = new Parser();
         const csv = json2csvParser.parse(dailySales);
@@ -741,12 +746,15 @@ router.post('/settle/revert/:id', async (req, res) => {
         await run("DELETE FROM staff_settlements WHERE staff_id = ? AND settlement_date = ? AND expected_amount = ?", [dist.staff_id, dist.settlement_date, dist.calculated_revenue]);
 
         // 3. Delete the leftover stock bundle that was created during settlement
+        // and merge its range back into the original stock item.
         if (dist.returned_start_number) {
+            const leftoverStock = await get("SELECT end_number FROM ticket_stock WHERE start_number = ? AND event_session_id = ?", [dist.returned_start_number, dist.event_session_id]);
+            await run("UPDATE ticket_stock SET end_number = ?, status = 'Distributed' WHERE id = ?", [leftoverStock.end_number, dist.stock_id]);
             await run("DELETE FROM ticket_stock WHERE start_number = ? AND event_session_id = ?", [dist.returned_start_number, dist.event_session_id]);
         }
 
-        // 4. Revert the original ticket_stock status to 'Distributed'
-        await run("UPDATE ticket_stock SET status = 'Distributed' WHERE id = ?", [dist.stock_id]);
+        // 4. If the whole bundle was sold, just revert the status
+        else { await run("UPDATE ticket_stock SET status = 'Distributed' WHERE id = ?", [dist.stock_id]); }
 
         // 5. Revert the ticket_distributions record to 'Distributed' and clear settlement data
         await run(`UPDATE ticket_distributions SET status = 'Distributed', returned_start_number = NULL, settlement_date = NULL, tickets_sold = NULL, calculated_revenue = NULL, upi_amount = NULL, cash_amount = NULL, settled_by_user_id = NULL WHERE id = ?`, [id]);

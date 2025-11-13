@@ -78,11 +78,15 @@ async function setupDatabase() {
       await run(`ALTER TABLE booking_edits ADD COLUMN user_notified INTEGER DEFAULT 0`).catch(e => { if (!e.message.includes('duplicate')) throw e; });
       await run(`ALTER TABLE bookings ADD COLUMN booking_status TEXT DEFAULT 'active'`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
       await run(`ALTER TABLE bookings ADD COLUMN vacated_date DATE`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
+      await run(`ALTER TABLE bookings ADD COLUMN rebooked_from_booking_id INTEGER`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
       // Add missing columns to material_defaults if it exists
       await run(`ALTER TABLE material_defaults ADD COLUMN plywood_free INTEGER DEFAULT 0`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
+      await run(`ALTER TABLE spaces ADD COLUMN is_active INTEGER DEFAULT 1`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
+      await run(`ALTER TABLE sheds ADD COLUMN is_active INTEGER DEFAULT 1`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
       await run(`ALTER TABLE material_defaults ADD COLUMN rod_free INTEGER DEFAULT 0`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
       await run(`ALTER TABLE material_defaults ADD COLUMN table_free INTEGER DEFAULT 0`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
       await run(`ALTER TABLE material_defaults ADD COLUMN chair_free INTEGER DEFAULT 0`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
+      await run(`ALTER TABLE bookings ADD COLUMN notes TEXT`).catch(e => { if (!e.message.includes('duplicate column name')) throw e; });
 
       // Add the missing tables if they don't exist
 
@@ -106,6 +110,63 @@ async function setupDatabase() {
       await run(`DROP TABLE IF EXISTS stalls`);
       await run(`DROP TABLE IF EXISTS pavilions`);
 
+      // --- Rebuild bookings table to allow NULL space_id if needed ---
+      try {
+        const tableInfoResult = await get(`PRAGMA table_info(bookings)`);
+        if (tableInfoResult) { // Check if table exists
+            const spaceIdColumn = (await all(`PRAGMA table_info(bookings)`)).find(col => col.name === 'space_id');
+            // If space_id column exists and is NOT NULL, we need to rebuild the table.
+            if (spaceIdColumn && spaceIdColumn.notnull === 1) {
+              console.log('Rebuilding bookings table to allow NULL space_id...');
+              await run('BEGIN TRANSACTION');
+              await run('ALTER TABLE bookings RENAME TO bookings_old');
+              // Create the new table with the correct schema (space_id is removed)
+              await run(`CREATE TABLE bookings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, booking_date TEXT NOT NULL, exhibitor_name TEXT, facia_name TEXT, product_category TEXT, 
+                contact_person TEXT, full_address TEXT, contact_number TEXT, secondary_number TEXT, id_proof TEXT, 
+                rent_amount REAL, discount REAL, advance_amount REAL, due_amount REAL, form_submitted INTEGER DEFAULT 0, 
+                booking_status TEXT DEFAULT 'active', vacated_date DATE, client_id INTEGER, event_session_id INTEGER, 
+                rebooked_from_booking_id INTEGER, notes TEXT, 
+                FOREIGN KEY (client_id) REFERENCES clients(id), FOREIGN KEY (event_session_id) REFERENCES event_sessions(id)
+              )`);
+              
+              // Get columns from old table, excluding the old space_id
+              const oldColumns = (await all(`PRAGMA table_info(bookings_old)`))
+                .map(c => c.name)
+                .filter(name => name !== 'space_id')
+                .join(', ');
+
+              // Copy data from the old table to the new one, matching columns
+              await run(`INSERT INTO bookings (${oldColumns}) SELECT ${oldColumns} FROM bookings_old`);
+              await run('DROP TABLE bookings_old');
+              await run('COMMIT');
+              console.log('Bookings table rebuilt successfully.');
+            }
+        } else {
+            // If table doesn't exist, create it correctly.
+            await run(`CREATE TABLE bookings (
+              id INTEGER PRIMARY KEY AUTOINCREMENT, booking_date TEXT NOT NULL, exhibitor_name TEXT, facia_name TEXT, product_category TEXT, 
+              contact_person TEXT, full_address TEXT, contact_number TEXT, secondary_number TEXT, id_proof TEXT, 
+              rent_amount REAL, discount REAL, advance_amount REAL, due_amount REAL, form_submitted INTEGER DEFAULT 0, 
+              booking_status TEXT DEFAULT 'active', vacated_date DATE, client_id INTEGER, event_session_id INTEGER, 
+              rebooked_from_booking_id INTEGER, notes TEXT, 
+              FOREIGN KEY (client_id) REFERENCES clients(id), FOREIGN KEY (event_session_id) REFERENCES event_sessions(id)
+            )`);
+        }
+      } catch (e) {
+        console.error('Error during bookings table rebuild:', e.message);
+        await run('ROLLBACK').catch(() => {}); // Rollback if anything failed
+        throw e; // Stop the setup if this critical step fails
+      }
+
+      await run(`CREATE TABLE IF NOT EXISTS booking_spaces (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        booking_id INTEGER NOT NULL,
+        space_id INTEGER NOT NULL,
+        FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE,
+        FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE
+      )`);
+
       await run(`CREATE TABLE IF NOT EXISTS spaces (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     type TEXT NOT NULL,
@@ -114,41 +175,8 @@ async function setupDatabase() {
     rent_amount REAL,
     facilities TEXT,
     location TEXT,
-    status TEXT DEFAULT 'Available'
-  )`);
-
-      await run(`DELETE FROM spaces WHERE type = 'SpecialZone'`);
-
-      await run(`CREATE TABLE IF NOT EXISTS clients (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    contact_person TEXT,
-    contact_number TEXT,
-    full_address TEXT
-  )`);
-
-      await run(`CREATE TABLE IF NOT EXISTS bookings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    space_id INTEGER NOT NULL,
-    booking_date TEXT NOT NULL,
-    exhibitor_name TEXT,
-    facia_name TEXT,
-    product_category TEXT,
-    contact_person TEXT,
-    full_address TEXT,
-    contact_number TEXT,
-    secondary_number TEXT,
-    id_proof TEXT,
-    rent_amount REAL,
-    discount REAL,
-    advance_amount REAL,
-    due_amount REAL,
-    form_submitted INTEGER DEFAULT 0,
-    booking_status TEXT DEFAULT 'active', -- active, vacated
-    vacated_date DATE,
-    client_id INTEGER,
-    FOREIGN KEY (space_id) REFERENCES spaces(id),
-    FOREIGN KEY (client_id) REFERENCES clients(id)
+    status TEXT DEFAULT 'Available',
+    is_active INTEGER DEFAULT 1
   )`);
 
       await run(`CREATE TABLE IF NOT EXISTS material_issues (
@@ -244,7 +272,8 @@ async function setupDatabase() {
     name TEXT NOT NULL UNIQUE,
     size TEXT,
     rent REAL,
-    status TEXT DEFAULT 'Available'
+    status TEXT DEFAULT 'Available',
+    is_active INTEGER DEFAULT 1
   )`);
 
       await run(`CREATE TABLE IF NOT EXISTS shed_allocations (
@@ -490,6 +519,18 @@ async function setupDatabase() {
         for (const table of tablesToUpdate) {
           await run(`UPDATE ${table} SET event_session_id = ? WHERE event_session_id IS NULL`, [defaultSession.id]);
         }
+
+        // --- One-time migration for booking_spaces ---
+        const hasMigrated = await get("SELECT 1 FROM booking_spaces LIMIT 1");
+        if (!hasMigrated) {
+          console.log('Migrating existing single-space bookings to new booking_spaces table...');
+          await run(`
+            INSERT INTO booking_spaces (booking_id, space_id)
+            SELECT id, space_id FROM bookings WHERE space_id IS NOT NULL
+          `);
+          console.log('Migration to booking_spaces complete.');
+        }
+
       }
 
       // --- Ticketing System Tables ---

@@ -1,444 +1,281 @@
 <%- include('partials/header') %>
 
-<% if (showBackupAlert) { %>
-  <div class="container">
-    <div class="alert alert-warning d-flex align-items-center" role="alert">
-      <i class="bi bi-database-down fs-2 me-3"></i>
-      <div>
-        <strong>Daily Backup Reminder:</strong> You have not performed a database backup today. Please go to <a href="/settings/backup-db" class="alert-link">Settings > Backup Database</a> to secure your data.
-      </div>
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0"><%= title %></h1>
+        <form action="/dashboard/search" method="POST" class="d-flex">
+            <input class="form-control me-2" type="search" name="q" placeholder="Search Exhibitor/Space..." aria-label="Search">
+            <button class="btn btn-outline-success" type="submit">Search</button>
+        </form>
     </div>
-  </div>
-<% } %>
 
-<div class="container mt-4">
-  <% if (message) { %>
-    <div class="alert alert-success alert-dismissible fade show" role="alert">
-      <%= message %>
-      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    </div>
-  <% } %>
-
-  <!-- Summary Cards -->
-  <div class="row mb-4">
-    <div class="col-12 col-sm-6 col-lg-3 mb-4">
-      <div class="card summary-card card-total shadow-sm h-100">
-        <div class="card-body d-flex justify-content-between align-items-center">
-          <div>
-            <div class="fs-4 fw-bold"><%= totalSpaces %></div>
-            <div class="text-uppercase small fw-bold">Total Spaces</div>
-          </div>
-          <i class="bi bi-grid-3x3-gap-fill fs-1"></i>
+    <% if (showBackupAlert) { %>
+        <div class="alert alert-warning" role="alert">
+            <strong>Reminder:</strong> You haven't performed a database backup today. Please go to <a href="/settings/backup">Settings</a> to back up your data.
         </div>
-      </div>
-    </div>
-    <div class="col-12 col-sm-6 col-lg-3 mb-4">
-      <div class="card summary-card card-available shadow-sm h-100">
-        <div class="card-body d-flex justify-content-between align-items-center">
-          <div>
-            <div class="fs-4 fw-bold"><%= statusCounts.Available || 0 %></div>
-            <div class="text-uppercase small fw-bold">Available</div>
-          </div>
-          <i class="bi bi-check-circle-fill fs-1"></i>
-        </div>
-      </div>
-    </div>
-    <div class="col-12 col-sm-6 col-lg-3 mb-4">
-      <div class="card summary-card card-booked shadow-sm h-100">
-        <div class="card-body d-flex justify-content-between align-items-center">
-          <div>
-            <div class="fs-4 fw-bold"><%= statusCounts.Booked || 0 %></div>
-            <div class="text-uppercase small fw-bold">Booked</div>
-          </div>
-          <i class="bi bi-x-circle-fill fs-1"></i>
-        </div>
-      </div>
-    </div>
-    <div class="col-12 col-sm-6 col-lg-3 mb-4">
-      <div class="card summary-card card-categories shadow-sm h-100">
-        <div class="card-body">
-          <h5 class="card-title">Space Categories</h5>
-          <p class="card-text small mb-0">Pavilions: <strong><%= categoryCounts.Pavilion || 0 %></strong></p>
-          <p class="card-text small mb-0">Stalls: <strong><%= categoryCounts.Stall || 0 %></strong></p>
-          <p class="card-text small mb-0">Booths: <strong><%= categoryCounts.Booth || 0 %></strong></p>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Charts -->
-<div class="container mt-4">
-  <div class="row">
-    <div class="col-lg-4 mb-4">
-      <div class="card shadow-sm h-100">
-        <div class="card-header">
-          <h5 class="mb-0">Space Allocation</h5>
-        </div>
-        <div class="card-body d-flex justify-content-center align-items-center">
-          <canvas id="spaceAllocationChart" style="max-height: 250px;"></canvas>
-        </div>
-      </div>
-    </div>
-    <div class="col-lg-8 mb-4">
-      <div class="card shadow-sm h-100">
-        <div class="card-header">
-          <h5 class="mb-0">Payment Collection by Category</h5>
-        </div>
-        <div class="card-body">
-          <canvas id="paymentCollectionChart" style="max-height: 250px;"></canvas>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<% if (user && user.role === 'admin' && recentActivities && recentActivities.length > 0) { %>
-<!-- Recent Activity Feed -->
-<div class="card shadow-sm mb-4">
-  <div class="card-header">
-    <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Recent Activity</h5>
-  </div>
-  <div class="card-body p-0">
-    <ul class="list-group list-group-flush">
-      <% recentActivities.forEach(activity => { %>
-        <li class="list-group-item">
-          <div class="d-flex w-100 justify-content-between">
-            <p class="mb-1">
-              <strong class="text-primary"><%= activity.username %></strong>
-              <%= activity.action.replace(/_/g, ' ') %>:
-              <span class="text-muted"><%= activity.details %></span>
-            </p>
-            <small class="text-nowrap text-muted" title="<%= new Date(activity.timestamp).toLocaleString() %>">
-              <%= new Date(activity.timestamp).toLocaleDateString() %>
-            </small>
-          </div>
-        </li>
-      <% }); %>
-    </ul>
-  </div>
-  <div class="card-footer text-center">
-    <a href="/report/audit-log" class="text-decoration-none">View Full Audit Log →</a>
-  </div>
-</div>
-<% } %>
-
-<hr>
-
-<% if (userNotifications && userNotifications.length > 0) { %>
-<!-- User Notifications -->
-<div class="card mb-4 border-info">
-  <div class="card-header bg-info text-dark">
-    <h4><i class="bi bi-bell-fill me-2"></i>Your Notifications</h4>
-  </div>
-  <div class="card-body">
-    <% userNotifications.forEach(notification => { %>
-      <div class="alert <%= notification.status === 'approved' ? 'alert-success' : (notification.status === 'rejected' ? 'alert-danger' : 'alert-secondary') %> d-flex justify-content-between align-items-center">
-        <div class="flex-grow-1 me-3">
-          <strong><%= notification.exhibitor_name %> (<%= notification.edit_type %>):</strong> Your edit request is <strong><%= notification.status %></strong>.
-          <% if (notification.status === 'rejected' && notification.rejection_reason) { %>
-            <p class="mb-0 small"><em>Admin Comment: <%= notification.rejection_reason %></em></p>
-          <% } else if (notification.status === 'pending') { %>
-            <p class="mb-0 small"><em>Waiting for administrator approval.</em></p>
-          <% } else if (notification.status === 'approved') { %>
-            <p class="mb-0 small"><em>This change has been applied.</em></p>
-          <% } %>
-        </div>
-        <div class="d-flex align-items-center">
-          <% if (notification.status === 'rejected') { %>
-            <a href="/booking/edit/<%= notification.booking_id %>" class="btn btn-sm btn-outline-primary me-2">Re-Edit</a>
-          <% } %>
-          <% if (notification.status !== 'pending') { %>
-            <form action="/notification/dismiss/<%= notification.edit_type %>/<%= notification.id %>" method="POST" class="d-inline">
-              <button type="submit" class="btn-close" aria-label="Dismiss"></button>
-            </form>
-          <% } %>
-        </div>
-      </div>
-    <% }); %>
-  </div>
-</div>
-<% } %>
-
-<% if (user && user.role === 'admin' && pendingApprovals && pendingApprovals.length > 0) { %>
-<!-- Pending Approvals -->
-<div class="card mb-4 border-warning">
-  <div class="card-header bg-warning text-dark">
-    <h4><i class="bi bi-exclamation-triangle-fill me-2"></i>Pending Approvals</h4>
-  </div>
-  <div class="card-body">
-    <table class="table table-hover table-sm">
-      <thead>
-        <tr>
-          <th>Exhibitor</th>
-          <th>Edit Type</th>
-          <th>Requested By</th>
-          <th>Request Date</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% pendingApprovals.forEach(approval => { %>
-          <tr>
-            <td><%= approval.exhibitor_name %></td>
-            <td><span class="badge bg-secondary"><%= approval.edit_type %></span></td>
-            <td><%= approval.username %></td>
-            <td><%= new Date(approval.request_date).toLocaleString() %></td>
-            <td>
-              <% if (approval.edit_type === 'Booking') { %>
-                <a href="/booking/approve/<%= approval.id %>" class="btn btn-sm btn-primary">Review Full</a>
-              <% } else if (approval.edit_type === 'Payment') { %>
-                <a href="/charges/approve/<%= approval.id %>" class="btn btn-sm btn-primary">View & Approve</a>
-              <% } else if (approval.edit_type === 'Material') { %>
-                <a href="/material/approve/<%= approval.id %>" class="btn btn-sm btn-primary">View & Approve</a>
-              <% } else if (approval.edit_type === 'Electric') { %>
-                <a href="/electric/approve/<%= approval.id %>" class="btn btn-sm btn-primary">View & Approve</a>
-              <% } %>
-            </td>
-          </tr>
-        <% }); %>
-      </tbody>
-    </table>
-  </div>
-</div>
-<% } %>
-
-<!-- Space Layout -->
-<!-- Space Layout -->
-<div class="card shadow-sm mb-4">
-  <div class="card-header">
-    <h5 class="mb-0">Find Exhibitor</h5>
-  </div>
-  <div class="card-body">
-    <form action="/dashboard/search" method="POST" class="row g-3 align-items-center">
-      <div class="col-md-10">
-        <label for="dashboard-search" class="visually-hidden">Search Exhibitor</label>
-        <input type="text" name="q" id="dashboard-search" class="form-control form-control-lg" placeholder="Search by Exhibitor, Facia, or Space Name..." required>
-      </div>
-      <div class="col-md-2">
-        <button type="submit" class="btn btn-primary btn-lg w-100"><i class="bi bi-search"></i> Search</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-<h4 class="mt-4 mb-3">Space Layout</h4>
-
-<%
-  // Define the desired order for space types
-  const desiredOrder = ['Pavilion', 'Stall', 'SpecialZone', 'Booth'];
-  const allTypes = Object.keys(spacesByType);
-
-  // Create a sorted list based on the desired order, and append any other types at the end
-  const sortedTypes = desiredOrder.filter(type => allTypes.includes(type));
-  allTypes.forEach(type => {
-    if (!sortedTypes.includes(type)) {
-      sortedTypes.push(type);
-    }
-  });
-%>
-
-<% sortedTypes.forEach(type => { %>
-    <% if (spacesByType[type] && spacesByType[type].length > 0) { %>
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="mb-0"><%= type.replace('SpecialZone', 'Special Zone') %>s</h5>
-        </div>
-        <div class="card-body">
-            <div class="row g-2">
-                <% spacesByType[type].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })).forEach(space => { %>
-                    <div class="col-6 col-sm-4 col-md-3 col-lg-2">
-                        <a href="/booking/details-full-by-space/<%= space.id %>" class="space-card-link">
-                            <div class="space-card <%= space.session_status.toLowerCase() %>">
-                                <div class="space-card-name"><%= space.name %></div>
-                                <div class="space-card-status">
-                                    <%= space.session_status === 'Booked' ? (space.facia_name || 'Booked') : 'Available' %>
-                                </div>
-                            </div>
-                        </a>
-                    </div>
-                <% }); %>
-            </div>
-        </div>
-    </div>
     <% } %>
-<% }); %>
 
-<% if (user && user.role === 'admin') { %>
-<!-- Payment Collection Summary -->
-<div class="card shadow-sm mb-4">
-  <div class="card-header">
-    <h4 class="mb-0"><i class="bi bi-wallet2 me-2"></i>Payment Collection Summary</h4>
-  </div>
-  <div class="card-body">
+    <!-- Summary Cards -->
     <div class="row">
-      <% 
-        const categories = [
-          { name: 'Rent', data: financials.rent, icon: 'bi-house-door-fill', color: 'primary' },
-          { name: 'Electric', data: financials.electric, icon: 'bi-lightning-charge-fill', color: 'warning' },
-          { name: 'Material', data: financials.material, icon: 'bi-box-seam-fill', color: 'info' },
-          { name: 'Shed', data: financials.shed, icon: 'bi-shop', color: 'success' }
-        ];
-        const grandTotal = {
-          charged: categories.reduce((sum, cat) => sum + cat.data.charged, 0),
-          paid: categories.reduce((sum, cat) => sum + cat.data.paid, 0),
-        };
-        grandTotal.due = grandTotal.charged - grandTotal.paid;
-      %>
-
-      <!-- Grand Total Card -->
-      <div class="col-lg-12 mb-4">
-        <div class="card financial-summary-card total-summary-card">
-          <div class="card-body">
-            <h5 class="card-title">Grand Total</h5>
-            <p class="card-text total-amount">₹<%= grandTotal.paid.toLocaleString('en-IN') %> / <small>₹<%= grandTotal.charged.toLocaleString('en-IN') %></small></p>
-            <% const totalPercentage = grandTotal.charged > 0 ? (grandTotal.paid / grandTotal.charged) * 100 : 0; %>
-            <div class="progress" style="height: 10px;">
-              <div class="progress-bar bg-light" role="progressbar" style="width: <%= totalPercentage.toFixed(2) %>%" aria-valuenow="<%= totalPercentage.toFixed(2) %>" aria-valuemin="0" aria-valuemax="100"></div>
+        <div class="col-md-6 col-xl-3 mb-4">
+            <div class="card text-white bg-primary h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Total Spaces</h5>
+                    <p class="card-text fs-2 fw-bold"><%= totalSpaces %></p>
+                </div>
             </div>
-            <div class="d-flex justify-content-between mt-2">
-              <span class="text-light">Collected</span>
-              <span class="text-light">Due: ₹<%= grandTotal.due.toLocaleString('en-IN') %></span>
-            </div>
-          </div>
         </div>
-      </div>
-
-      <!-- Individual Category Cards -->
-      <% categories.forEach(cat => { %>
-        <div class="col-lg-3 col-md-6 mb-4">
-          <div class="card financial-summary-card h-100">
-            <div class="card-body">
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <h6 class="card-title mb-0"><%= cat.name %></h6>
-                <i class="<%= cat.icon %> fs-4 text-<%= cat.color %>"></i>
-              </div>
-              <% const percentage = cat.data.charged > 0 ? (cat.data.paid / cat.data.charged) * 100 : 0; %>
-              <div class="progress mb-2" style="height: 5px;">
-                <div class="progress-bar bg-<%= cat.color %>" role="progressbar" style="width: <%= percentage.toFixed(2) %>%" aria-valuenow="<%= percentage.toFixed(2) %>" aria-valuemin="0" aria-valuemax="100"></div>
-              </div>
-              <p class="card-text small mb-1"><strong>Paid:</strong> ₹<%= cat.data.paidFormatted %></p>
-              <p class="card-text small mb-1"><strong>Due:</strong> <span class="fw-bold <%= cat.data.due > 0 ? 'text-danger' : '' %>">₹<%= cat.data.dueFormatted %></span></p>
-              <p class="card-text small text-muted"><strong>Total:</strong> ₹<%= cat.data.chargedFormatted %></p>
+        <div class="col-md-6 col-xl-3 mb-4">
+            <div class="card text-white bg-success h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Booked Spaces</h5>
+                    <p class="card-text fs-2 fw-bold"><%= statusCounts.Booked %></p>
+                </div>
             </div>
-          </div>
         </div>
-      <% }) %>
+        <div class="col-md-6 col-xl-3 mb-4">
+            <div class="card text-dark bg-light h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Available Spaces</h5>
+                    <p class="card-text fs-2 fw-bold"><%= statusCounts.Available %></p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-xl-3 mb-4">
+            <div class="card text-dark bg-warning h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Unallocated Exhibitors</h5>
+                    <p class="card-text fs-2 fw-bold"><%= statusCounts.Unallocated %></p>
+                </div>
+                <a href="/booking/list" class="card-footer text-dark text-decoration-none">
+                    View List <i class="bi bi-arrow-right-circle"></i>
+                </a>
+            </div>
+        </div>
     </div>
-  </div>
-</div>
-<% } %>
 
+    <div class="row">
+        <!-- Left Column: Space Layout -->
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Space Layout</h5>
+                </div>
+                <div class="card-body">
+                    <% const typeOrder = ['Pavilion', 'Stall', 'Booth', ...Object.keys(spacesByType).filter(t => !['Pavilion', 'Stall', 'Booth'].includes(t))]; %>
+                    <% typeOrder.forEach(type => { %>
+                        <% if (spacesByType[type]) { %>
+                            <h6 class="mt-3"><%= type %> (<%= categoryCounts[type] || 0 %>)</h6>
+                            <div class="d-flex flex-wrap">
+                                <% spacesByType[type].forEach(space => { %>
+                                <div class="space-box-wrapper">
+                                    <a href="/booking/details-full-by-space/<%= space.id %>" 
+                                       class="space-box <%= space.session_status === 'Booked' ? 'booked' : 'available' %>"
+                                       title="<%= space.session_status === 'Booked' ? `Booked by: ${space.exhibitor_name}` : 'Available' %>">
+                                        <div class="space-name"><%= space.name %></div>
+                                        <% if (space.session_status === 'Booked' && space.facia_name) { %>
+                                            <div class="facia-name"><%= space.facia_name %></div>
+                                        <% } %>
+                                    </a>
+                                    <% if (space.session_status === 'Booked') { %>
+                                        <a href="/charges/add?booking_id=<%= space.booking_id %>" class="btn btn-xs btn-success add-payment-btn" title="Add Payment">+ ₹</a>
+                                    <% } %>
+                                </div>
+                                <% }) %>
+                            </div>
+                        <% } %>
+                    <% }) %>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Approvals & Activity -->
+        <div class="col-lg-4">
+            <% if (user && user.role === 'admin' && pendingApprovals.length > 0) { %>
+                <div class="card mb-4">
+                    <div class="card-header bg-warning">
+                        <h5 class="mb-0">Pending Approvals</h5>
+                    </div>
+                    <ul class="list-group list-group-flush">
+                        <% pendingApprovals.forEach(approval => { %>
+                            <li class="list-group-item">
+                                <a href="/<%= approval.edit_type.toLowerCase() %>/approve/<%= approval.id %>">
+                                    <strong><%= approval.edit_type %> Edit:</strong> <%= approval.exhibitor_name %>
+                                </a>
+                                <small class="d-block text-muted">by <%= approval.username %> on <%= new Date(approval.request_date).toLocaleDateString('en-GB') %></small>
+                            </li>
+                        <% }) %>
+                    </ul>
+                </div>
+            <% } %>
+
+            <% if (user && user.role !== 'admin' && userNotifications.length > 0) { %>
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Notifications</h5>
+                    </div>
+                    <ul class="list-group list-group-flush">
+                        <% userNotifications.forEach(notification => { %>
+                            <li class="list-group-item">
+                                <strong><%= notification.edit_type %> Edit for <%= notification.exhibitor_name %>:</strong>
+                                <span class="badge bg-<%= notification.status === 'approved' ? 'success' : (notification.status === 'rejected' ? 'danger' : 'secondary') %>">
+                                    <%= notification.status %>
+                                </span>
+                                <% if (notification.status !== 'pending') { %>
+                                    <form action="/notification/mark-read/<%= notification.id %>?type=<%= notification.edit_type.toLowerCase() %>" method="POST" class="d-inline float-end">
+                                        <button type="submit" class="btn-close" aria-label="Mark as read"></button>
+                                    </form>
+                                <% } %>
+                            </li>
+                        <% }) %>
+                    </ul>
+                </div>
+            <% } %>
+
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Recent Activity</h5>
+                </div>
+                <ul class="list-group list-group-flush">
+                    <% if (recentActivities.length > 0) { %>
+                        <% recentActivities.forEach(activity => { %>
+                            <li class="list-group-item">
+                                <p class="mb-1"><strong><%= activity.username %></strong>: <%= activity.details %></p>
+                                <small class="text-muted"><%= new Date(activity.timestamp).toLocaleString('en-GB') %></small>
+                            </li>
+                        <% }) %>
+                    <% } else { %>
+                        <li class="list-group-item text-center text-muted">No recent activity.</li>
+                    <% } %>
+                </ul>
+            </div>
+        </div>
+    </div>
 </div>
+
+<!-- Financial Summary -->
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="card total-summary-card">
+                <div class="card-body text-center">
+                    <h5 class="card-title mb-4">Total Financial Overview</h5>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <h6>Total Charged</h6>
+                            <p class="total-amount"><small>₹</small><%= financials.total.chargedFormatted %></p>
+                        </div>
+                        <div class="col-md-4">
+                            <h6>Total Paid</h6>
+                            <p class="total-amount"><small>₹</small><%= financials.total.paidFormatted %></p>
+                        </div>
+                        <div class="col-md-4">
+                            <h6>Total Due</h6>
+                            <p class="total-amount"><small>₹</small><%= financials.total.dueFormatted %></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <h4 class="mb-3">Financial Summary</h4>
+    <div class="row">
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="card h-100 financial-summary-card">
+                <div class="card-body">
+                    <h5 class="card-title">Rent</h5>
+                    <p class="card-text">Charged: <span class="fw-bold"><%= financials.rent.chargedFormatted %></span></p>
+                    <p class="card-text">Paid: <span class="text-success fw-bold"><%= financials.rent.paidFormatted %></span></p>
+                    <p class="card-text">Due: <span class="text-danger fw-bold"><%= financials.rent.dueFormatted %></span></p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="card h-100 financial-summary-card">
+                <div class="card-body">
+                    <h5 class="card-title">Electric</h5>
+                    <p class="card-text">Charged: <span class="fw-bold"><%= financials.electric.chargedFormatted %></span></p>
+                    <p class="card-text">Paid: <span class="text-success fw-bold"><%= financials.electric.paidFormatted %></span></p>
+                    <p class="card-text">Due: <span class="text-danger fw-bold"><%= financials.electric.dueFormatted %></span></p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="card h-100 financial-summary-card">
+                <div class="card-body">
+                    <h5 class="card-title">Material</h5>
+                    <p class="card-text">Charged: <span class="fw-bold"><%= financials.material.chargedFormatted %></span></p>
+                    <p class="card-text">Paid: <span class="text-success fw-bold"><%= financials.material.paidFormatted %></span></p>
+                    <p class="card-text">Due: <span class="text-danger fw-bold"><%= financials.material.dueFormatted %></span></p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="card h-100 financial-summary-card">
+                <div class="card-body">
+                    <h5 class="card-title">Shed</h5>
+                    <p class="card-text">Charged: <span class="fw-bold"><%= financials.shed.chargedFormatted %></span></p>
+                    <p class="card-text">Paid: <span class="text-success fw-bold"><%= financials.shed.paidFormatted %></span></p>
+                    <p class="card-text">Due: <span class="text-danger fw-bold"><%= financials.shed.dueFormatted %></span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .space-box-wrapper {
+        position: relative;
+        margin: 4px;
+    }
+    .space-box {
+        border: 1px solid #ccc;
+        padding: 4px 8px;
+        margin: 4px;
+        border-radius: 4px;
+        text-decoration: none;
+        color: #333;
+        text-align: center;
+        min-width: 80px;
+        display: block;
+        transition: all 0.2s ease-in-out;
+    }
+    .space-name {
+        font-weight: 500;
+        font-size: 0.9rem;
+    }
+    .facia-name {
+        font-size: 0.7rem;
+        color: #555;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .space-box.available {
+        background-color: #e9ecef;
+    }
+    .space-box.booked {
+        background-color: #d1e7dd;
+        border-color: #b1d5c2;
+    }
+    .space-box:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .add-payment-btn {
+        position: absolute;
+        top: -8px;
+        right: -8px;
+        border-radius: 50%;
+        font-weight: bold;
+        line-height: 1;
+        padding: 2px 6px;
+        font-size: 0.8rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .btn-xs { /* Custom small button size */
+        --bs-btn-padding-y: .1rem; --bs-btn-padding-x: .4rem; --bs-btn-font-size: .75rem;
+    }
+</style>
 
 <%- include('partials/footer') %>
-
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // 1. Space Allocation Chart (Doughnut Chart)
-        const spaceCtx = document.getElementById('spaceAllocationChart');
-        if (spaceCtx) {
-            const spaceData = <%- JSON.stringify(statusCounts) %>;
-            const totalSpaces = (spaceData.Available || 0) + (spaceData.Booked || 0);
-            const bookedPercentage = totalSpaces > 0 ? ((spaceData.Booked || 0) / totalSpaces * 100).toFixed(1) : 0;
-
-            new Chart(spaceCtx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Available', 'Booked'],
-                    datasets: [{
-                        label: 'Spaces',
-                        data: [spaceData.Available || 0, spaceData.Booked || 0],
-                        backgroundColor: [
-                            '#1d976c', // Green for Available
-                            '#d31027' // Red for Booked
-                        ],
-                        borderColor: '#ffffff',
-                        borderWidth: 2,
-                        hoverOffset: 4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    cutout: '70%',
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    let label = context.label || '';
-                                    if (label) {
-                                        label += ': ';
-                                    }
-                                    if (context.parsed !== null) {
-                                        label += context.parsed;
-                                    }
-                                    return label;
-                                }
-                            }
-                        },
-                        title: {
-                            display: true,
-                            text: `${bookedPercentage}% Booked`,
-                            position: 'bottom',
-                            align: 'center',
-                            font: { size: 18, weight: 'bold' },
-                            padding: { top: 20, bottom: 0 }
-                        }
-                    }
-                }
-            });
-        }
-
-        // 2. Payment Collection Chart (Grouped Bar Chart)
-        const paymentCtx = document.getElementById('paymentCollectionChart');
-        if (paymentCtx) {
-            const financialsData = <%- JSON.stringify(financials) %>;
-            new Chart(paymentCtx, {
-                type: 'bar',
-                data: {
-                    labels: ['Rent', 'Electric', 'Material', 'Shed'],
-                    datasets: [{
-                        label: 'Total Charged',
-                        data: [financialsData.rent.charged, financialsData.electric.charged, financialsData.material.charged, financialsData.shed.charged],
-                        backgroundColor: 'rgba(0, 114, 255, 0.5)', // Blue
-                        borderColor: 'rgba(0, 114, 255, 1)',
-                        borderWidth: 1
-                    }, {
-                        label: 'Amount Received',
-                        data: [financialsData.rent.paid, financialsData.electric.paid, financialsData.material.paid, financialsData.shed.paid],
-                        backgroundColor: 'rgba(29, 151, 108, 0.7)', // Green
-                        borderColor: 'rgba(29, 151, 108, 1)',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'top',
-                        },
-                        tooltip: {
-                            mode: 'index',
-                            intersect: false,
-                        },
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                callback: function(value) {
-                                    return '₹' + value.toLocaleString('en-IN');
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        }
-    });
-</script>

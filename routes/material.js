@@ -9,9 +9,10 @@ router.get('/issue', async (req, res) => {
     const [clients, defaults, suggestions] = await Promise.all([
       all(`
         SELECT c.id as client_id, c.name as client_name, b.facia_name, s.name as space_name
-        FROM clients c
-        JOIN bookings b ON c.id = b.client_id
-        JOIN spaces s ON b.space_id = s.id
+        FROM clients c 
+        JOIN bookings b ON c.id = b.client_id AND b.booking_status = 'active'
+        LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s 
+        ON b.id = s.booking_id
         ORDER BY c.name
       `),
       get('SELECT * FROM material_defaults WHERE id = 1'),
@@ -96,10 +97,11 @@ router.get('/edit/:id', async (req, res) => {
         const [issue, clients, suggestions] = await Promise.all([
             get('SELECT * FROM material_issues WHERE id = ?', [issueId]),
             all(`
-                SELECT c.id as client_id, c.name as client_name, b.facia_name, s.name as space_name
-                FROM clients c
-                JOIN bookings b ON c.id = b.client_id
-                JOIN spaces s ON b.space_id = s.id
+                SELECT c.id as client_id, c.name as client_name, b.facia_name, s.space_name
+                FROM clients c 
+                JOIN bookings b ON c.id = b.client_id AND b.booking_status = 'active'
+                LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s 
+                ON b.id = s.booking_id
                 ORDER BY c.name
             `),
             get('SELECT GROUP_CONCAT(DISTINCT camp) as camps FROM material_issues WHERE camp IS NOT NULL')
@@ -292,12 +294,13 @@ router.get('/api/get-client-free-item-defaults/:clientId', async (req, res) => {
 
     try {
         // Fetch the space type for the client's active booking
-        const booking = await get(`
-            SELECT s.type as space_type
-            FROM bookings b
-            JOIN spaces s ON b.space_id = s.id
-            WHERE b.client_id = ? AND b.event_session_id = ? AND b.booking_status = 'active'
-        `, [clientId, viewingSessionId]);
+        const booking = await get(` 
+            SELECT s.type as space_type 
+            FROM bookings b 
+            JOIN booking_spaces bs ON b.id = bs.booking_id 
+            JOIN spaces s ON bs.space_id = s.id 
+            WHERE b.client_id = ? AND b.event_session_id = ? AND b.booking_status = 'active' LIMIT 1`, 
+            [clientId, viewingSessionId]);
 
         const spaceType = booking?.space_type?.toLowerCase();
 

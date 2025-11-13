@@ -1,0 +1,17 @@
+<ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+        <a class="nav-link <%= currentPath.startsWith('/report/payment-received') ? 'active' : '' %>" href="/report/payment-received">Payments</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link <%= currentPath.startsWith('/report/exhibitor-dues') ? 'active' : '' %>" href="/report/exhibitor-dues">Dues Summary</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link <%= currentPath.startsWith('/report/exhibitor-charges') ? 'active' : '' %>" href="/report/exhibitor-charges">Charges Summary</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link <%= currentPath.startsWith('/report/write-offs') ? 'active' : '' %>" href="/report/write-offs">Write-Offs</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link <%= currentPath.startsWith('/ticketing/report') ? 'active' : '' %>" href="/ticketing/report">Ticketing</a>
+    </li>
+</ul>

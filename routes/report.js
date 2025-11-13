@@ -12,6 +12,51 @@ router.get('/', (req, res) => {
   res.render('report', { title: 'Reports' });
 });
 
+// GET /report/write-offs - Show all write-offs
+router.get('/write-offs', async (req, res) => {
+  try {
+    const viewingSessionId = res.locals.viewingSession.id;
+    const { start_date, end_date } = req.query;
+
+    let sql = `
+      SELECT
+        wo.write_off_date,
+        wo.amount,
+        wo.reason,
+        b.exhibitor_name,
+        u.username as user_name
+      FROM write_offs wo
+      JOIN bookings b ON wo.booking_id = b.id AND b.event_session_id = wo.event_session_id
+      LEFT JOIN users u ON wo.user_id = u.id
+    `;
+
+    const whereClauses = ['wo.event_session_id = ?'];
+    const params = [viewingSessionId];
+
+    if (start_date) {
+      whereClauses.push('wo.write_off_date >= ?');
+      params.push(start_date);
+    }
+    if (end_date) {
+      whereClauses.push('wo.write_off_date <= ?');
+      params.push(end_date);
+    }
+
+    sql += ` WHERE ${whereClauses.join(' AND ')} ORDER BY wo.write_off_date DESC`;
+
+    const writeOffs = await all(sql, params);
+
+    res.render('reportWriteOffs', {
+      title: 'Write-Offs Report',
+      writeOffs: writeOffs || [],
+      filters: { start_date: start_date || '', end_date: end_date || '' }
+    });
+  } catch (err) {
+    console.error('Error generating write-offs report:', err);
+    res.status(500).send('Error generating report.');
+  }
+});
+
 // GET /report/payment-received - Show all payments received
 router.get('/payment-received', async (req, res) => {
   try {
@@ -38,8 +83,13 @@ router.get('/payment-received', async (req, res) => {
           ELSE 'Unknown'
         END as payment_category
       FROM payments p
-      JOIN bookings b ON p.booking_id = b.id
-      JOIN spaces s ON b.space_id = s.id
+      JOIN bookings b ON p.booking_id = b.id AND b.event_session_id = p.event_session_id
+      LEFT JOIN (
+        SELECT bs.booking_id, GROUP_CONCAT(s.name, ', ') as space_name 
+        FROM booking_spaces bs 
+        JOIN spaces s ON bs.space_id = s.id 
+        GROUP BY bs.booking_id
+      ) s ON b.id = s.booking_id
     `;
 
     const whereClauses = ['p.event_session_id = ?'];
@@ -54,7 +104,7 @@ router.get('/payment-received', async (req, res) => {
       params.push(end_date);
     }
     if (q) {
-      whereClauses.push('(b.exhibitor_name LIKE ? OR s.name LIKE ? OR p.receipt_number LIKE ?)');
+      whereClauses.push('(b.exhibitor_name LIKE ? OR s.space_name LIKE ? OR p.receipt_number LIKE ?)');
       params.push(`%${q}%`, `%${q}%`, `%${q}%`);
     }
     if (category && category !== 'all') {
@@ -72,7 +122,14 @@ router.get('/payment-received', async (req, res) => {
     const whereSql = `WHERE ${whereClauses.join(' AND ')}`;
 
     // Get total count and summary for the filtered data
-    const summarySql = `SELECT COUNT(*) as count, SUM(p.cash_paid) as total_cash, SUM(p.upi_paid) as total_upi, SUM(p.cash_paid + p.upi_paid) as total_paid FROM payments p JOIN bookings b ON p.booking_id = b.id JOIN spaces s ON b.space_id = s.id ${whereSql}`;
+    const summarySql = `
+      SELECT COUNT(*) as count, SUM(p.cash_paid) as total_cash, SUM(p.upi_paid) as total_upi, SUM(p.cash_paid + p.upi_paid) as total_paid 
+      FROM payments p 
+      JOIN bookings b ON p.booking_id = b.id 
+      LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s 
+      ON b.id = s.booking_id 
+      ${whereSql}
+    `;
     const summaryResult = await get(summarySql, params);
 
     const totalItems = summaryResult.count || 0;
@@ -116,13 +173,18 @@ router.get('/payment-received/csv', async (req, res) => {
     const { start_date, end_date, q, category } = req.query;
 
     // This query is identical to the one in the main report route
-    const sql = `SELECT p.payment_date, p.receipt_number, b.exhibitor_name, s.name as space_name, CASE WHEN p.rent_paid > 0 THEN 'Rent' WHEN p.electric_paid > 0 THEN 'Electric' WHEN p.material_paid > 0 THEN 'Material' WHEN p.shed_paid > 0 THEN 'Shed' ELSE 'Unknown' END as payment_category, p.payment_mode, p.cash_paid, p.upi_paid, (p.cash_paid + p.upi_paid) as total_paid FROM payments p JOIN bookings b ON p.booking_id = b.id JOIN spaces s ON b.space_id = s.id`;
+    const sql = `SELECT p.payment_date, p.receipt_number, b.exhibitor_name, s.space_name, CASE WHEN p.rent_paid > 0 THEN 'Rent' WHEN p.electric_paid > 0 THEN 'Electric' WHEN p.material_paid > 0 THEN 'Material' WHEN p.shed_paid > 0 THEN 'Shed' ELSE 'Unknown' END as payment_category, p.payment_mode, p.cash_paid, p.upi_paid, (p.cash_paid + p.upi_paid) as total_paid 
+                 FROM payments p 
+                 JOIN bookings b ON p.booking_id = b.id AND b.event_session_id = p.event_session_id 
+                 LEFT JOIN (SELECT bs.booking_id, GROUP_CONCAT(s.name, ', ') as space_name FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY bs.booking_id) s 
+                 ON b.id = s.booking_id`;
+
     const whereClauses = ['p.event_session_id = ?'];
     const params = [viewingSessionId];
 
     if (start_date) { whereClauses.push('p.payment_date >= ?'); params.push(start_date); }
     if (end_date) { whereClauses.push('p.payment_date <= ?'); params.push(end_date); }
-    if (q) { whereClauses.push('(b.exhibitor_name LIKE ? OR s.name LIKE ? OR p.receipt_number LIKE ?)'); params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
+    if (q) { whereClauses.push('(b.exhibitor_name LIKE ? OR s.space_name LIKE ? OR p.receipt_number LIKE ?)'); params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
     if (category && category !== 'all') {
       const categoryMap = {
         'Rent': 'p.rent_paid > 0',
@@ -161,20 +223,21 @@ router.get('/exhibitors', async (req, res) => {
       SELECT
         b.exhibitor_name,
         b.facia_name,
-        s.name as space_name,
-        s.type as space_type,
+        s.space_name,
+        s.space_type,
         b.contact_person,
         b.contact_number,
         b.product_category
       FROM bookings b
-      JOIN spaces s ON b.space_id = s.id
+      LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name, GROUP_CONCAT(s.type, ', ') as space_type FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s 
+      ON b.id = s.booking_id
     `;
 
     const whereClauses = ['b.event_session_id = ?'];
     const params = [viewingSessionId];
 
     if (q) {
-      whereClauses.push('(b.exhibitor_name LIKE ? OR b.facia_name LIKE ? OR s.name LIKE ? OR b.product_category LIKE ?)');
+      whereClauses.push('(b.exhibitor_name LIKE ? OR b.facia_name LIKE ? OR s.space_name LIKE ? OR b.product_category LIKE ?)');
       params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
     }
 
@@ -193,25 +256,21 @@ router.get('/exhibitors', async (req, res) => {
   }
 });
 
-// GET /report/exhibitor-dues - Show a summary of dues for all exhibitors
-router.get('/exhibitor-dues', async (req, res) => {
-  try {
-    const viewingSessionId = res.locals.viewingSession.id;
-    const { q } = req.query;
-
-    // This query is similar to the due-list but simplified for this report's needs.
-    const sql = `
+// Helper function to get exhibitor financial data, avoiding code duplication
+async function getExhibitorFinancialData(viewingSessionId, q) {
+  const sql = `
       SELECT
         b.id as booking_id,
         b.exhibitor_name,
         b.facia_name,
-        s.name as space_name,
+        s.space_name,
         (b.rent_amount - COALESCE(b.discount, 0)) as total_rent,
         (COALESCE(p.total_paid, 0) + COALESCE(b.advance_amount, 0)) as total_paid,
         ((b.rent_amount - COALESCE(b.discount, 0)) + COALESCE(eb.total_electric_charge, 0) + COALESCE(mi.total_material_charge, 0) + COALESCE(sh.total_shed_charge, 0)) as total_charged
       FROM bookings b
-      JOIN spaces s ON b.space_id = s.id
-      -- Aggregate Payments
+      LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s 
+      ON b.id = s.booking_id
+      -- Aggregate Payments for the current session
       LEFT JOIN (
         SELECT booking_id, SUM(rent_paid + electric_paid + material_paid + shed_paid) as total_paid
         FROM payments 
@@ -225,17 +284,25 @@ router.get('/exhibitor-dues', async (req, res) => {
       -- Aggregate Shed Charges
       LEFT JOIN (SELECT booking_id, SUM(rent) as total_shed_charge FROM (SELECT sa.booking_id, s.rent FROM shed_allocations sa JOIN sheds s ON sa.shed_id = s.id WHERE sa.event_session_id = ? UNION ALL SELECT sb.booking_id, sb.amount as rent FROM shed_bills sb WHERE sb.event_session_id = ?) GROUP BY booking_id) sh ON b.id = sh.booking_id
     `;
+  const whereClauses = ['b.event_session_id = ?'];
+  const params = [viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId];
 
-    const whereClauses = ['b.event_session_id = ?'];
-    const params = [viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId];
+  if (q) {
+      whereClauses.push('(b.exhibitor_name LIKE ? OR s.space_name LIKE ? OR b.facia_name LIKE ?)');
+    params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+  }
 
-    if (q) {
-      whereClauses.push('(b.exhibitor_name LIKE ? OR b.facia_name LIKE ? OR s.name LIKE ?)');
-      params.push(`%${q}%`, `%${q}%`, `%${q}%`);
-    }
+  const fullSql = `${sql} WHERE ${whereClauses.join(' AND ')} ORDER BY b.id DESC`;
+  return await all(fullSql, params);
+}
 
-    const fullSql = `${sql} WHERE ${whereClauses.join(' AND ')} ORDER BY CASE WHEN s.name LIKE 'P-%' THEN 1 WHEN s.name LIKE 'S-%' THEN 2 WHEN s.name LIKE 'O-%' THEN 3 ELSE 4 END, CAST(SUBSTR(s.name, INSTR(s.name, '-') + 1) AS INTEGER), s.name`;
-    const exhibitors = await all(fullSql, params);
+// GET /report/exhibitor-dues - Show a summary of dues for all exhibitors
+router.get('/exhibitor-dues', async (req, res) => {
+  try {
+    const viewingSessionId = res.locals.viewingSession.id;
+    const { q } = req.query;
+
+    const exhibitors = await getExhibitorFinancialData(viewingSessionId, q);
 
     let subtotal = { total_rent: 0, total_paid: 0, balance_due: 0 };
     const reportData = exhibitors.map(e => {
@@ -259,34 +326,7 @@ router.get('/exhibitor-dues/csv', async (req, res) => {
     const viewingSessionId = res.locals.viewingSession.id;
     const { q } = req.query;
 
-    // This query is identical to the one in the main report route
-    const sql = `
-      SELECT
-        b.id as booking_id,
-        b.exhibitor_name,
-        b.facia_name,
-        s.name as space_name,
-        (b.rent_amount - COALESCE(b.discount, 0)) as total_rent,
-        (COALESCE(p.total_paid, 0) + COALESCE(b.advance_amount, 0)) as total_paid,
-        ((b.rent_amount - COALESCE(b.discount, 0)) + COALESCE(eb.total_electric_charge, 0) + COALESCE(mi.total_material_charge, 0) + COALESCE(sh.total_shed_charge, 0)) as total_charged
-      FROM bookings b
-      JOIN spaces s ON b.space_id = s.id
-      LEFT JOIN (SELECT booking_id, SUM(rent_paid + electric_paid + material_paid + shed_paid) as total_paid FROM payments WHERE event_session_id = ? GROUP BY booking_id) p ON b.id = p.booking_id
-      LEFT JOIN (SELECT booking_id, SUM(total_amount) as total_electric_charge FROM electric_bills WHERE event_session_id = ? GROUP BY booking_id) eb ON b.id = eb.booking_id
-      LEFT JOIN (SELECT client_id, SUM(total_payable) as total_material_charge FROM material_issues WHERE event_session_id = ? GROUP BY client_id) mi ON b.client_id = mi.client_id
-      LEFT JOIN (SELECT booking_id, SUM(rent) as total_shed_charge FROM (SELECT sa.booking_id, s.rent FROM shed_allocations sa JOIN sheds s ON sa.shed_id = s.id WHERE sa.event_session_id = ? UNION ALL SELECT sb.booking_id, sb.amount as rent FROM shed_bills sb WHERE sb.event_session_id = ?) GROUP BY booking_id) sh ON b.id = sh.booking_id
-    `;
-
-    const whereClauses = ['b.event_session_id = ?'];
-    const params = [viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId];
-
-    if (q) {
-      whereClauses.push('(b.exhibitor_name LIKE ? OR b.facia_name LIKE ? OR s.name LIKE ?)');
-      params.push(`%${q}%`, `%${q}%`, `%${q}%`);
-    }
-
-    const fullSql = `${sql} WHERE ${whereClauses.join(' AND ')} ORDER BY CASE WHEN s.name LIKE 'P-%' THEN 1 WHEN s.name LIKE 'S-%' THEN 2 WHEN s.name LIKE 'O-%' THEN 3 ELSE 4 END, CAST(SUBSTR(s.name, INSTR(s.name, '-') + 1) AS INTEGER), s.name`;
-    const exhibitors = await all(fullSql, params);
+    const exhibitors = await getExhibitorFinancialData(viewingSessionId, q);
 
     const reportData = exhibitors.map(e => ({
       'Exhibitor Name': e.exhibitor_name,
@@ -315,46 +355,7 @@ router.get('/exhibitor-charges', async (req, res) => {
     const viewingSessionId = res.locals.viewingSession.id;
     const { q } = req.query;
 
-    // This query is identical to the exhibitor-dues report, as it already calculates total charges.
-    const sql = `
-      SELECT
-        b.id as booking_id,
-        b.exhibitor_name,
-        b.facia_name,
-        s.name as space_name,
-        (b.rent_amount - COALESCE(b.discount, 0)) as rent_charged,
-        COALESCE(eb.total_electric_charge, 0) as electric_charged,
-        COALESCE(mi.total_material_charge, 0) as material_charged,
-        COALESCE(sh.total_shed_charge, 0) as shed_charged,
-        (COALESCE(p.total_paid, 0) + COALESCE(b.advance_amount, 0)) as total_paid,
-        ((b.rent_amount - COALESCE(b.discount, 0)) + COALESCE(eb.total_electric_charge, 0) + COALESCE(mi.total_material_charge, 0) + COALESCE(sh.total_shed_charge, 0)) as total_charged
-      FROM bookings b
-      JOIN spaces s ON b.space_id = s.id
-      -- Aggregate Payments
-      LEFT JOIN (
-        SELECT booking_id, SUM(rent_paid + electric_paid + material_paid + shed_paid) as total_paid
-        FROM payments 
-        WHERE event_session_id = ?
-        GROUP BY booking_id
-      ) p ON b.id = p.booking_id
-      -- Aggregate Electric Bills
-      LEFT JOIN (SELECT booking_id, SUM(total_amount) as total_electric_charge FROM electric_bills WHERE event_session_id = ? GROUP BY booking_id) eb ON b.id = eb.booking_id
-      -- Aggregate Material Issues
-      LEFT JOIN (SELECT client_id, SUM(total_payable) as total_material_charge FROM material_issues WHERE event_session_id = ? GROUP BY client_id) mi ON b.client_id = mi.client_id
-      -- Aggregate Shed Charges
-      LEFT JOIN (SELECT booking_id, SUM(rent) as total_shed_charge FROM (SELECT sa.booking_id, s.rent FROM shed_allocations sa JOIN sheds s ON sa.shed_id = s.id WHERE sa.event_session_id = ? UNION ALL SELECT sb.booking_id, sb.amount as rent FROM shed_bills sb WHERE sb.event_session_id = ?) GROUP BY booking_id) sh ON b.id = sh.booking_id
-    `;
-
-    const whereClauses = ['b.event_session_id = ?'];
-    const params = [viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId];
-
-    if (q) {
-      whereClauses.push('(b.exhibitor_name LIKE ? OR b.facia_name LIKE ? OR s.name LIKE ?)');
-      params.push(`%${q}%`, `%${q}%`, `%${q}%`);
-    }
-
-    const fullSql = `${sql} WHERE ${whereClauses.join(' AND ')} ORDER BY CASE WHEN s.name LIKE 'P-%' THEN 1 WHEN s.name LIKE 'S-%' THEN 2 WHEN s.name LIKE 'O-%' THEN 3 ELSE 4 END, CAST(SUBSTR(s.name, INSTR(s.name, '-') + 1) AS INTEGER), s.name`;
-    const exhibitors = await all(fullSql, params);
+    const exhibitors = await getExhibitorFinancialData(viewingSessionId, q);
 
     let subtotal = { rent_charged: 0, electric_charged: 0, material_charged: 0, shed_charged: 0, total_charged: 0, total_paid: 0, balance_due: 0 };
     const reportData = exhibitors.map(e => {
@@ -382,37 +383,7 @@ router.get('/exhibitor-charges/csv', async (req, res) => {
     const viewingSessionId = res.locals.viewingSession.id;
     const { q } = req.query;
 
-    // This query is identical to the one in the main report route
-    const sql = `
-      SELECT
-        b.id as booking_id,
-        b.exhibitor_name,
-        b.facia_name,
-        s.name as space_name,
-        (b.rent_amount - COALESCE(b.discount, 0)) as rent_charged,
-        COALESCE(eb.total_electric_charge, 0) as electric_charged,
-        COALESCE(mi.total_material_charge, 0) as material_charged,
-        COALESCE(sh.total_shed_charge, 0) as shed_charged,
-        (COALESCE(p.total_paid, 0) + COALESCE(b.advance_amount, 0)) as total_paid,
-        ((b.rent_amount - COALESCE(b.discount, 0)) + COALESCE(eb.total_electric_charge, 0) + COALESCE(mi.total_material_charge, 0) + COALESCE(sh.total_shed_charge, 0)) as total_charged
-      FROM bookings b
-      JOIN spaces s ON b.space_id = s.id
-      LEFT JOIN (SELECT booking_id, SUM(rent_paid + electric_paid + material_paid + shed_paid) as total_paid FROM payments WHERE event_session_id = ? GROUP BY booking_id) p ON b.id = p.booking_id
-      LEFT JOIN (SELECT booking_id, SUM(total_amount) as total_electric_charge FROM electric_bills WHERE event_session_id = ? GROUP BY booking_id) eb ON b.id = eb.booking_id
-      LEFT JOIN (SELECT client_id, SUM(total_payable) as total_material_charge FROM material_issues WHERE event_session_id = ? GROUP BY client_id) mi ON b.client_id = mi.client_id
-      LEFT JOIN (SELECT booking_id, SUM(rent) as total_shed_charge FROM (SELECT sa.booking_id, s.rent FROM shed_allocations sa JOIN sheds s ON sa.shed_id = s.id WHERE sa.event_session_id = ? UNION ALL SELECT sb.booking_id, sb.amount as rent FROM shed_bills sb WHERE sb.event_session_id = ?) GROUP BY booking_id) sh ON b.id = sh.booking_id
-    `;
-
-    const whereClauses = ['b.event_session_id = ?'];
-    const params = [viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId];
-
-    if (q) {
-      whereClauses.push('(b.exhibitor_name LIKE ? OR b.facia_name LIKE ? OR s.name LIKE ?)');
-      params.push(`%${q}%`, `%${q}%`, `%${q}%`);
-    }
-
-    const fullSql = `${sql} WHERE ${whereClauses.join(' AND ')} ORDER BY CASE WHEN s.name LIKE 'P-%' THEN 1 WHEN s.name LIKE 'S-%' THEN 2 WHEN s.name LIKE 'O-%' THEN 3 ELSE 4 END, CAST(SUBSTR(s.name, INSTR(s.name, '-') + 1) AS INTEGER), s.name`;
-    const exhibitors = await all(fullSql, params);
+    const exhibitors = await getExhibitorFinancialData(viewingSessionId, q);
 
     const reportData = exhibitors.map(e => ({
       'Exhibitor Name': e.exhibitor_name,
@@ -445,16 +416,19 @@ router.get('/exhibitors/csv', async (req, res) => {
     const viewingSessionId = res.locals.viewingSession.id;
     const { q } = req.query;
 
-    let sql = `SELECT b.exhibitor_name, b.facia_name, s.name as space_name, s.type as space_type, b.contact_person, b.contact_number, b.product_category FROM bookings b JOIN spaces s ON b.space_id = s.id`;
-    const whereClauses = ['b.event_session_id = ?'];
+    let sql = `SELECT b.exhibitor_name, b.facia_name, s.space_name, s.space_type, b.contact_person, b.contact_number, b.product_category 
+                 FROM bookings b 
+                 LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name, GROUP_CONCAT(s.type, ', ') as space_type FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s 
+                 ON b.id = s.booking_id`;
+    const whereClauses = ['b.event_session_id = ?', "b.booking_status = 'active'"];
     const params = [viewingSessionId];
 
     if (q) {
-      whereClauses.push('(b.exhibitor_name LIKE ? OR b.facia_name LIKE ? OR s.name LIKE ? OR b.product_category LIKE ?)');
+      whereClauses.push('(b.exhibitor_name LIKE ? OR b.facia_name LIKE ? OR s.space_name LIKE ? OR b.product_category LIKE ?)');
       params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
     }
 
-    const fullSql = `${sql} WHERE ${whereClauses.join(' AND ')} ORDER BY b.exhibitor_name`;
+    const fullSql = `${sql} WHERE ${whereClauses.join(' AND ')} ORDER BY b.id DESC`;
     const exhibitors = await all(fullSql, params);
 
     const json2csvParser = new Parser();
@@ -480,7 +454,7 @@ router.get('/due-list', async (req, res) => {
         b.id as booking_id,
         b.exhibitor_name,
         b.facia_name,
-        s.name as space_name,
+        s.space_name,
         b.contact_number,
         -- Rent
         (b.rent_amount - COALESCE(b.discount, 0)) as total_rent_charge,
@@ -495,8 +469,9 @@ router.get('/due-list', async (req, res) => {
         COALESCE(sh.total_shed_charge, 0) as total_shed_charge,
         COALESCE(p.total_shed_paid, 0) as total_shed_paid
       FROM bookings b
-      JOIN spaces s ON b.space_id = s.id
-      -- Aggregate Payments
+      LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s 
+      ON b.id = s.booking_id
+      -- Aggregate Payments for the current session
       LEFT JOIN (
         SELECT booking_id, 
                SUM(rent_paid) as total_rent_paid, 
@@ -504,34 +479,34 @@ router.get('/due-list', async (req, res) => {
                SUM(material_paid) as total_material_paid, 
                SUM(shed_paid) as total_shed_paid
         FROM payments 
-        GROUP BY booking_id
+        WHERE event_session_id = ? GROUP BY booking_id
       ) p ON b.id = p.booking_id
       -- Aggregate Electric Bills
-      LEFT JOIN (SELECT booking_id, SUM(total_amount) as total_electric_charge FROM electric_bills GROUP BY booking_id) eb ON b.id = eb.booking_id
+      LEFT JOIN (SELECT booking_id, SUM(total_amount) as total_electric_charge FROM electric_bills WHERE event_session_id = ? GROUP BY booking_id) eb ON b.id = eb.booking_id
       -- Aggregate Material Issues
-      LEFT JOIN (SELECT client_id, SUM(total_payable) as total_material_charge FROM material_issues GROUP BY client_id) mi ON b.client_id = mi.client_id
+      LEFT JOIN (SELECT client_id, SUM(total_payable) as total_material_charge FROM material_issues WHERE event_session_id = ? GROUP BY client_id) mi ON b.client_id = mi.client_id
       -- Aggregate Shed Charges (Allocations + Bills)
       LEFT JOIN (
         SELECT 
           booking_id, 
           SUM(rent) as total_shed_charge 
         FROM (
-          SELECT sa.booking_id, s.rent FROM shed_allocations sa JOIN sheds s ON sa.shed_id = s.id
+          SELECT sa.booking_id, s.rent FROM shed_allocations sa JOIN sheds s ON sa.shed_id = s.id WHERE sa.event_session_id = ?
           UNION ALL
-          SELECT sb.booking_id, sb.amount as rent FROM shed_bills sb
+          SELECT sb.booking_id, sb.amount as rent FROM shed_bills sb WHERE sb.event_session_id = ?
         ) GROUP BY booking_id
       ) sh ON b.id = sh.booking_id
     `;
 
     let whereClauses = ['b.event_session_id = ?'];
-    let params = [viewingSessionId];
+    let params = [viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId];
 
     if (q) {
-      whereClauses.push('(b.exhibitor_name LIKE ? OR s.name LIKE ?)');
+      whereClauses.push('(b.exhibitor_name LIKE ? OR s.space_name LIKE ?)');
       params.push(`%${q}%`, `%${q}%`);
     }
 
-    const fullSql = `${sql} WHERE ${whereClauses.join(' AND ')} ORDER BY b.exhibitor_name`;
+    const fullSql = `${sql} WHERE ${whereClauses.join(' AND ')} ORDER BY b.id DESC`;
 
     const bookings = await all(fullSql, params);
     
@@ -579,31 +554,42 @@ router.get('/due-list/csv', async (req, res) => {
   try {
     const viewingSessionId = res.locals.viewingSession.id;
     const { q, category = 'all' } = req.query;
+    // Replaced N+1 query with the more efficient JOIN-based query from the main due-list report.
     const sql = `
       SELECT
-        b.id as booking_id,
-        b.exhibitor_name,
-        b.facia_name,
-        s.name as space_name,
-        (b.rent_amount - b.discount) as total_rent_charge,
-        (SELECT SUM(p.rent_paid) FROM payments p WHERE p.booking_id = b.id AND p.event_session_id = b.event_session_id) + b.advance_amount as total_rent_paid,
-        (SELECT SUM(eb.total_amount) FROM electric_bills eb WHERE eb.booking_id = b.id AND eb.event_session_id = b.event_session_id) as total_electric_charge,
-        (SELECT SUM(p.electric_paid) FROM payments p WHERE p.booking_id = b.id AND p.event_session_id = b.event_session_id) as total_electric_paid,
-        (SELECT SUM(mi.total_payable) FROM material_issues mi WHERE mi.client_id = b.client_id AND mi.event_session_id = b.event_session_id) as total_material_charge,
-        (SELECT SUM(p.material_paid) FROM payments p WHERE p.booking_id = b.id AND p.event_session_id = b.event_session_id) as total_material_paid,
-        ((SELECT SUM(s.rent) FROM shed_allocations sa JOIN sheds s ON sa.shed_id = s.id WHERE sa.booking_id = b.id AND sa.event_session_id = b.event_session_id) + (SELECT SUM(sb.amount) FROM shed_bills sb WHERE sb.booking_id = b.id AND sb.event_session_id = b.event_session_id)) as total_shed_charge,
-        (SELECT SUM(p.shed_paid) FROM payments p WHERE p.booking_id = b.id AND p.event_session_id = b.event_session_id) as total_shed_paid
+        b.id as booking_id, b.exhibitor_name, b.facia_name, s.space_name,
+        (b.rent_amount - COALESCE(b.discount, 0)) as total_rent_charge,
+        COALESCE(p.total_rent_paid, 0) + COALESCE(b.advance_amount, 0) as total_rent_paid,
+        COALESCE(eb.total_electric_charge, 0) as total_electric_charge,
+        COALESCE(p.total_electric_paid, 0) as total_electric_paid,
+        COALESCE(mi.total_material_charge, 0) as total_material_charge,
+        COALESCE(p.total_material_paid, 0) as total_material_paid,
+        COALESCE(sh.total_shed_charge, 0) as total_shed_charge,
+        COALESCE(p.total_shed_paid, 0) as total_shed_paid
       FROM bookings b
-      JOIN spaces s ON b.space_id = s.id
+      LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s ON b.id = s.booking_id
+      LEFT JOIN (
+        SELECT booking_id, SUM(rent_paid) as total_rent_paid, SUM(electric_paid) as total_electric_paid, SUM(material_paid) as total_material_paid, SUM(shed_paid) as total_shed_paid
+        FROM payments WHERE event_session_id = ? GROUP BY booking_id
+      ) p ON b.id = p.booking_id
+      LEFT JOIN (SELECT booking_id, SUM(total_amount) as total_electric_charge FROM electric_bills WHERE event_session_id = ? GROUP BY booking_id) eb ON b.id = eb.booking_id
+      LEFT JOIN (SELECT client_id, SUM(total_payable) as total_material_charge FROM material_issues WHERE event_session_id = ? GROUP BY client_id) mi ON b.client_id = mi.client_id
+      LEFT JOIN (
+        SELECT booking_id, SUM(rent) as total_shed_charge FROM (
+          SELECT sa.booking_id, s.rent FROM shed_allocations sa JOIN sheds s ON sa.shed_id = s.id WHERE sa.event_session_id = ?
+          UNION ALL
+          SELECT sb.booking_id, sb.amount as rent FROM shed_bills sb WHERE sb.event_session_id = ?
+        ) GROUP BY booking_id
+      ) sh ON b.id = sh.booking_id
     `;
 
     let whereClauses = ['b.event_session_id = ?'];
-    let params = [viewingSessionId];
+    let params = [viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId];
     if (q) {
-      whereClauses.push('(b.exhibitor_name LIKE ? OR s.name LIKE ?)');
+      whereClauses.push('(b.exhibitor_name LIKE ? OR s.space_name LIKE ?)');
       params.push(`%${q}%`, `%${q}%`);
     }
-    const fullSql = `${sql} WHERE ${whereClauses.join(' AND ')} ORDER BY b.exhibitor_name`;
+    const fullSql = `${sql} WHERE ${whereClauses.join(' AND ')} ORDER BY b.id DESC`;
     const bookings = await all(fullSql, params);
 
     const fullDueList = bookings.map(b => {
@@ -648,8 +634,8 @@ router.get('/booking-summary', async (req, res) => {
       SELECT 
         b.id, 
         b.exhibitor_name, 
-        s.name as space_name, 
-        s.type as space_type, 
+        s.space_name, 
+        s.space_type, 
         b.rent_amount, 
         b.discount, 
         b.advance_amount, 
@@ -663,7 +649,8 @@ router.get('/booking-summary', async (req, res) => {
         COALESCE(mi.total_material_charge, 0) AS material_charged,
         COALESCE(sh.total_shed_charge, 0) AS shed_charged
       FROM bookings b
-      JOIN spaces s ON b.space_id = s.id
+      LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name, GROUP_CONCAT(s.type, ', ') as space_type FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s 
+      ON b.id = s.booking_id
       -- Aggregate Payments
       LEFT JOIN (
         SELECT booking_id, SUM(rent_paid + electric_paid + material_paid + shed_paid) as total_paid
@@ -687,7 +674,7 @@ router.get('/booking-summary', async (req, res) => {
       params.push(`%${q}%`, `%${q}%`, `%${q}%`);
     }
 
-    const fullSql = `${sql} WHERE ${whereClauses.join(' AND ')} ORDER BY s.type, s.name`;
+    const fullSql = `${sql} WHERE ${whereClauses.join(' AND ')} ORDER BY b.id DESC`;
     const fullParams = [viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId, ...params];
     const bookingsData = await all(fullSql, fullParams);
 
@@ -714,22 +701,18 @@ router.get('/booking-summary', async (req, res) => {
 router.get('/booking-summary/csv', async (req, res) => {
   try {
     const viewingSessionId = res.locals.viewingSession.id;
-    const { q } = req.query;
-    const sql = `
-      SELECT b.exhibitor_name, b.facia_name, s.name as space_name, s.type as space_type, b.rent_amount, b.discount, b.advance_amount, b.due_amount, b.form_submitted
-      FROM bookings b
-      JOIN spaces s ON b.space_id = s.id
-    `;
+    const { q } = req.query;    
+    const sql = `SELECT b.exhibitor_name, b.facia_name, s.space_name, s.space_type, b.rent_amount, b.discount, b.advance_amount, b.due_amount, b.form_submitted FROM bookings b LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name, GROUP_CONCAT(s.type, ', ') as space_type FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s ON b.id = s.booking_id`;
 
     const whereClauses = ['b.event_session_id = ?'];
     const params = [viewingSessionId];
 
     if (q) {
-      whereClauses.push('(b.exhibitor_name LIKE ? OR s.name LIKE ? OR b.facia_name LIKE ?)');
+      whereClauses.push('(b.exhibitor_name LIKE ? OR s.space_name LIKE ? OR b.facia_name LIKE ?)');
       params.push(`%${q}%`, `%${q}%`, `%${q}%`);
     }
 
-    const fullSql = `${sql} WHERE ${whereClauses.join(' AND ')} ORDER BY s.type, s.name`;
+    const fullSql = `${sql} WHERE ${whereClauses.join(' AND ')} ORDER BY b.id DESC`;
     const bookings = await all(fullSql, params);
 
     let csv = 'Exhibitor Name,Facia Name,Space,Type,Rent,Discount,Advance,Due,Form Submitted\n';
@@ -794,10 +777,11 @@ router.get('/electric-list', async (req, res) => {
   try {
     const viewingSessionId = res.locals.viewingSession.id;
     const bills = await all(`
-      SELECT eb.*, b.exhibitor_name, b.facia_name, s.name as space_name
+      SELECT eb.*, b.exhibitor_name, b.facia_name, s.space_name
       FROM electric_bills eb
-      JOIN bookings b ON eb.booking_id = b.id
-      JOIN spaces s ON b.space_id = s.id
+      JOIN bookings b ON eb.booking_id = b.id AND b.event_session_id = eb.event_session_id
+      LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s 
+      ON b.id = s.booking_id
       WHERE eb.event_session_id = ?
       ORDER BY eb.bill_date DESC, eb.id DESC
     `, [viewingSessionId]);
@@ -828,21 +812,45 @@ router.get('/electric-list', async (req, res) => {
 router.get('/shed-list', async (req, res) => {
   try {
     const viewingSessionId = res.locals.viewingSession.id;
+    // This query now calculates total charges and payments for sheds for each exhibitor with an allocation.
     const allocations = await all(`
       SELECT 
-        sa.id, 
-        s.name as shed_name, 
-        s.rent,
+        b.id as booking_id,
         b.exhibitor_name,
         b.facia_name,
-        sp.name as space_name
-      FROM shed_allocations sa
+        sp.space_name,
+        GROUP_CONCAT(s.name, ', ') as shed_names,
+        COALESCE(sh.total_shed_charge, 0) as total_charged,
+        COALESCE(p.total_shed_paid, 0) as total_paid,
+        (COALESCE(sh.total_shed_charge, 0) - COALESCE(p.total_shed_paid, 0)) as balance_due
+      FROM bookings b
+      -- Ensure we only get bookings that have at least one shed allocation
+      JOIN shed_allocations sa ON b.id = sa.booking_id AND sa.event_session_id = b.event_session_id
       JOIN sheds s ON sa.shed_id = s.id
-      JOIN bookings b ON sa.booking_id = b.id
-      JOIN spaces sp ON b.space_id = sp.id
-      WHERE sa.event_session_id = ?
-      ORDER BY s.name
-    `, [viewingSessionId]);
+      LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) sp ON b.id = sp.booking_id AND b.event_session_id = sa.event_session_id
+      -- Aggregate all shed charges (from allocations and separate bills)
+      LEFT JOIN (
+        SELECT 
+          booking_id, 
+          SUM(rent) as total_shed_charge 
+        FROM (
+          SELECT sa_inner.booking_id, s_inner.rent FROM shed_allocations sa_inner JOIN sheds s_inner ON sa_inner.shed_id = s_inner.id WHERE sa_inner.event_session_id = ?
+          UNION ALL
+          SELECT sb.booking_id, sb.amount as rent FROM shed_bills sb WHERE sb.event_session_id = ?
+        ) GROUP BY booking_id
+      ) sh ON b.id = sh.booking_id
+      -- Aggregate all shed payments
+      LEFT JOIN (
+        SELECT booking_id, SUM(shed_paid) as total_shed_paid
+        FROM payments
+        WHERE event_session_id = ?
+        GROUP BY booking_id
+      ) p ON b.id = p.booking_id
+      WHERE b.event_session_id = ?
+      GROUP BY b.id, b.exhibitor_name, b.facia_name, sp.space_name
+      ORDER BY b.exhibitor_name
+    `, [viewingSessionId, viewingSessionId, viewingSessionId, viewingSessionId]);
+
     res.render('reportShedList', { title: 'Shed Allocation Report', allocations });
   } catch (err) {
     console.error('Error generating shed allocation report:', err);
@@ -964,16 +972,17 @@ router.get('/materials', async (req, res) => {
         ms.status,
         ms.unique_id,
         c.name as issued_to_client,
-        s.name as space_name,
+        s.space_name,
         b.contact_number
       FROM material_stock ms
       LEFT JOIN clients c ON ms.issued_to_client_id = c.id
       LEFT JOIN (
-        SELECT client_id, space_id, contact_number 
+        SELECT b.client_id, b.id as booking_id, b.contact_number 
         FROM bookings 
         WHERE event_session_id = ? AND booking_status = 'active'
       ) b ON c.id = b.client_id
-      LEFT JOIN spaces s ON b.space_id = s.id
+      LEFT JOIN booking_spaces bs ON b.id = bs.booking_id
+      LEFT JOIN spaces s ON bs.space_id = s.id
     `;
 
     const whereClauses = [];
@@ -1021,10 +1030,11 @@ router.get('/materials/csv', async (req, res) => {
         ms.status, 
         ms.unique_id, 
         c.name as issued_to_client,
-        s.name as space_name
-      FROM material_stock ms
-      LEFT JOIN clients c ON ms.issued_to_client_id = c.id
-      LEFT JOIN (SELECT client_id, space_id FROM bookings WHERE event_session_id = ? AND booking_status = 'active') b ON c.id = b.client_id LEFT JOIN spaces s ON b.space_id = s.id
+        s.space_name
+      FROM material_stock ms LEFT JOIN clients c ON ms.issued_to_client_id = c.id
+      LEFT JOIN (SELECT client_id, id as booking_id FROM bookings WHERE event_session_id = ? AND booking_status = 'active') b ON c.id = b.client_id 
+      LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s 
+      ON b.booking_id = s.booking_id
       ORDER BY ms.name, ms.id
     `, [viewingSessionId]);
 
@@ -1053,21 +1063,22 @@ router.get('/material-issues', async (req, res) => {
         mi.issue_date,
         c.name as client_name,
         b.facia_name,
-        s.name as space_name,
+        s.space_name,
         mi.total_payable,
         mi.advance_paid,
         mi.balance_due
       FROM material_issues mi
       JOIN clients c ON mi.client_id = c.id
-      LEFT JOIN bookings b ON c.id = b.client_id AND b.event_session_id = mi.event_session_id AND b.booking_status = 'active'
-      LEFT JOIN spaces s ON b.space_id = s.id
+      LEFT JOIN bookings b ON c.id = b.client_id AND b.event_session_id = mi.event_session_id
+      LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s 
+      ON b.id = s.booking_id
     `;
 
     const whereClauses = ['mi.event_session_id = ?'];
     const params = [viewingSessionId];
 
     if (q) {
-      whereClauses.push('(c.name LIKE ? OR b.facia_name LIKE ? OR s.name LIKE ? OR mi.sl_no LIKE ?)');
+      whereClauses.push('(ms.name LIKE ? OR ms.unique_id LIKE ? OR c.name LIKE ? OR s.space_name LIKE ?)');
       params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
     }
 
@@ -1099,18 +1110,19 @@ router.get('/allocated-materials', async (req, res) => {
         c.name as client_name,
         b.facia_name,
         b.id as booking_id,
-        s.name as space_name
+        s.space_name
       FROM material_issues mi
       JOIN clients c ON mi.client_id = c.id
-      LEFT JOIN bookings b ON c.id = b.client_id AND b.event_session_id = mi.event_session_id AND b.booking_status = 'active'
-      LEFT JOIN spaces s ON b.space_id = s.id
+      LEFT JOIN bookings b ON c.id = b.client_id AND b.event_session_id = mi.event_session_id
+      LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s 
+      ON b.id = s.booking_id
     `;
 
     const whereClauses = ['mi.event_session_id = ?'];
     const params = [viewingSessionId];
 
     if (q) {
-      whereClauses.push('(c.name LIKE ? OR b.facia_name LIKE ? OR s.name LIKE ? OR mi.sl_no LIKE ?)');
+      whereClauses.push('(c.name LIKE ? OR b.facia_name LIKE ? OR s.space_name LIKE ? OR mi.sl_no LIKE ?)');
       params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
     }
 
@@ -1142,7 +1154,7 @@ router.get('/allocated-materials/csv', async (req, res) => {
         mi.issue_date as "Date",
         c.name as "Exhibitor",
         b.facia_name as "Facia Name",
-        s.name as "Space",
+        s.space_name as "Space",
         (COALESCE(mi.plywood_free, 0) + COALESCE(mi.plywood_paid, 0)) as "Plywood",
         (COALESCE(mi.table_free, 0) + COALESCE(mi.table_paid, 0)) as "Table",
         (COALESCE(mi.chair_free, 0) + COALESCE(mi.chair_paid, 0)) as "Chair",
@@ -1152,15 +1164,16 @@ router.get('/allocated-materials/csv', async (req, res) => {
         mi.notes as "Notes"
       FROM material_issues mi
       JOIN clients c ON mi.client_id = c.id
-      LEFT JOIN bookings b ON c.id = b.client_id AND b.event_session_id = mi.event_session_id AND b.booking_status = 'active'
-      LEFT JOIN spaces s ON b.space_id = s.id
+      LEFT JOIN bookings b ON c.id = b.client_id AND b.event_session_id = mi.event_session_id
+      LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s 
+      ON b.id = s.booking_id
     `;
 
     const whereClauses = ['mi.event_session_id = ?'];
     const params = [viewingSessionId];
 
     if (q) {
-      whereClauses.push('(c.name LIKE ? OR b.facia_name LIKE ? OR s.name LIKE ? OR mi.sl_no LIKE ?)');
+      whereClauses.push('(c.name LIKE ? OR b.facia_name LIKE ? OR s.space_name LIKE ? OR mi.sl_no LIKE ?)');
       params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
     }
 

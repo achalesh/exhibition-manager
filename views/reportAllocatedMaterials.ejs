@@ -1,96 +1,75 @@
 <%- include('partials/header') %>
 
-<div class="container-fluid">
-  <h2 class="mb-4"><%= title %></h2>
-
-  <!-- Search Form -->
-  <div class="card shadow-sm mb-4">
-    <div class="card-body">
-      <form action="/report/allocated-materials" method="GET" class="row g-3 align-items-center">
-        <div class="col-md-4">
-          <input type="text" name="q" class="form-control" placeholder="Search by Exhibitor, Facia, Space, SL No..." value="<%= filters.q %>">
-        </div>
-        <div class="col-auto">
-          <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i> Search</button>
-          <% if (filters.q) { %>
-            <a href="/report/allocated-materials" class="btn btn-outline-secondary ms-2">Clear</a>
-          <% } %>
-        </div>
-        <div class="col-auto">
-          <a href="/report/allocated-materials/csv?q=<%= filters.q %>" class="btn btn-success"><i class="bi bi-download me-1"></i> Download CSV</a>
-        </div>
-      </form>
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h3 mb-0"><%= title %></h1>
+        <a href="/report" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Report Menu
+        </a>
     </div>
-  </div>
 
-  <div class="card shadow-sm">
-    <div class="card-body">
-      <div class="table-responsive">
-        <table class="table table-striped table-hover">
-          <thead class="table-light">
-            <tr>
-              <th>SL No.</th>
-              <th>Date</th>
-              <th>Exhibitor</th>
-              <th>Space</th>
-              <th class="text-center">Plywood</th>
-              <th class="text-center">Table</th>
-              <th class="text-center">Chair</th>
-              <th class="text-center">Rod</th>
-              <th>Table/Chair Nos.</th>
-              <th>Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            <% if (issues && issues.length > 0) { %>
-              <% issues.forEach(issue => { %>
-                <tr>
-                  <td><%= issue.sl_no || issue.id %></td>
-                  <td><%= new Date(issue.issue_date).toLocaleDateString() %></td>
-                  <td>
-                    <% if (issue.booking_id) { %>
-                      <a href="/booking/details-full/<%= issue.booking_id %>"><strong><%= issue.client_name %></strong></a><br>
-                    <% } else { %>
-                      <strong><%= issue.client_name %></strong><br>
-                    <% } %>
-                    <small class="text-muted"><%= issue.facia_name || 'N/A' %></small>
-                  </td>
-                  <td><%= issue.space_name %></td>
-                  <td class="text-center">
-                    <%= (issue.plywood_free || 0) + (issue.plywood_paid || 0) %>
-                  </td>
-                  <td class="text-center">
-                    <%= (issue.table_free || 0) + (issue.table_paid || 0) %>
-                  </td>
-                  <td class="text-center">
-                    <%= (issue.chair_free || 0) + (issue.chair_paid || 0) %>
-                  </td>
-                  <td class="text-center">
-                    <%= (issue.rod_free || 0) %>
-                  </td>
-                  <td>
-                    <% if (issue.table_numbers || issue.chair_numbers) { %>
-                      <small>
-                        <% if (issue.table_numbers) { %><strong>T:</strong> <%= issue.table_numbers %><br><% } %>
-                        <% if (issue.chair_numbers) { %><strong>C:</strong> <%= issue.chair_numbers %><% } %>
-                      </small>
-                    <% } else { %>
-                      <span class="text-muted">N/A</span>
-                    <% } %>
-                  </td>
-                  <td class="text-muted fst-italic"><%= issue.notes %></td>
-                </tr>
-              <% }) %>
-            <% } else { %>
-              <tr>
-                <td colspan="10" class="text-center text-muted">No material issues found for the current session.</td>
-              </tr>
-            <% } %>
-          </tbody>
-        </table>
-      </div>
+    <!-- Filter Form -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form action="/report/allocated-materials" method="GET" class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label for="q" class="form-label">Search</label>
+                    <input type="text" class="form-control" id="q" name="q" value="<%= filters.q %>" placeholder="Exhibitor, Space, SL No...">
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-primary">Filter</button>
+                    <a href="/report/allocated-materials" class="btn btn-secondary ms-2">Clear</a>
+                </div>
+            </form>
+        </div>
     </div>
-  </div>
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between">
+            <span>Material Issues</span>
+            <a href="/report/allocated-materials/csv?<%- new URLSearchParams(filters) %>" class="btn btn-sm btn-outline-success">
+                <i class="bi bi-download me-1"></i> Export CSV
+            </a>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>SL No</th>
+                            <th>Date</th>
+                            <th>Exhibitor</th>
+                            <th>Space</th>
+                            <th class="text-center">Tables</th>
+                            <th>Table Numbers</th>
+                            <th class="text-center">Chairs</th>
+                            <th>Chair Numbers</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% if (issues.length > 0) { %>
+                            <% issues.forEach(issue => { %>
+                                <tr>
+                                    <td><a href="/material/issue/details/<%= issue.id %>"><%= issue.sl_no %></a></td>
+                                    <td><%= new Date(issue.issue_date).toLocaleDateString('en-GB') %></td>
+                                    <td><a href="/booking/details-full/<%= issue.booking_id %>"><%= issue.client_name %></a></td>
+                                    <td><%= issue.space_name %></td>
+                                    <td class="text-center"><%= (issue.table_free || 0) + (issue.table_paid || 0) %></td>
+                                    <td style="min-width: 150px;"><%= issue.table_numbers %></td>
+                                    <td class="text-center"><%= (issue.chair_free || 0) + (issue.chair_paid || 0) %></td>
+                                    <td style="min-width: 150px;"><%= issue.chair_numbers %></td>
+                                </tr>
+                            <% }) %>
+                        <% } else { %>
+                            <tr>
+                                <td colspan="8" class="text-center">No material issues found.</td>
+                            </tr>
+                        <% } %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>
 
 <%- include('partials/footer') %>

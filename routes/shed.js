@@ -5,22 +5,33 @@ const { all, get, run, transaction } = require('../db-helpers');
 // GET: Show page to manage all sheds (add, edit, delete)
 router.get('/manage', async (req, res) => {
   try {
+    const { status = 'active' } = req.query;
     const viewingSessionId = res.locals.viewingSession.id;
     // Fetch all sheds and join their allocation status for the current viewing session
-    const sheds = await all(`
+    let sql = `
       SELECT 
         s.*,
         CASE WHEN sa.id IS NOT NULL THEN 'Allocated' ELSE 'Available' END as session_status
       FROM sheds s
       LEFT JOIN shed_allocations sa ON s.id = sa.shed_id AND sa.event_session_id = ?
-      ORDER BY s.name
-    `, [viewingSessionId]);
+    `;
+    const params = [viewingSessionId];
+
+    if (status === 'active') {
+      sql += ' WHERE s.is_active = 1';
+    } else if (status === 'inactive') {
+      sql += ' WHERE s.is_active = 0';
+    }
+    sql += ' ORDER BY s.name';
+
+    const sheds = await all(sql, params);
 
     res.render('manageSheds', {
       title: 'Manage Sheds',
       sheds: sheds || [],
       viewingSession: res.locals.viewingSession,
-      report_url: '/shed/manage' // For active nav link
+      report_url: '/shed/manage', // For active nav link
+      filters: { status }
     });
   } catch (err) {
     console.error('Error loading manage sheds page:', err.message);
@@ -55,14 +66,16 @@ router.get('/allocate', async (req, res) => {
     const viewingSessionId = res.locals.viewingSession.id;
     // Fetch all current bookings and all available sheds in parallel
     const [bookings, sheds] = await Promise.all([
-      all(`SELECT b.id, b.exhibitor_name, s.name as space_name 
-           FROM bookings b JOIN spaces s ON b.space_id = s.id 
-           WHERE b.event_session_id = ?
+      all(`SELECT b.id, b.exhibitor_name, s.space_name 
+           FROM bookings b 
+           LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s 
+           ON b.id = s.booking_id
+           WHERE b.event_session_id = ? AND b.booking_status = 'active'
            ORDER BY b.exhibitor_name`, [viewingSessionId]),
       // A shed is available if it's not in the shed_allocations table for the current viewing session
       all(`
         SELECT s.* FROM sheds s
-        WHERE s.id NOT IN (SELECT sa.shed_id FROM shed_allocations sa WHERE sa.event_session_id = ?)
+        WHERE s.is_active = 1 AND s.id NOT IN (SELECT sa.shed_id FROM shed_allocations sa WHERE sa.event_session_id = ?)
         ORDER BY s.name
       `, [viewingSessionId])
     ]);
@@ -138,22 +151,35 @@ router.post('/delete/:id', async (req, res) => {
   const { id } = req.params;
 
   if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
-    req.session.flash = { type: 'warning', message: 'Cannot delete sheds from an archived session.' };
+    req.session.flash = { type: 'warning', message: 'Cannot deactivate sheds from an archived session.' };
     return res.redirect('/shed/manage');
   }
 
   try {
-    // First, check if the shed is currently allocated.
-    const allocation = await get('SELECT id FROM shed_allocations WHERE shed_id = ?', [id]);
+    // Check if the shed is currently allocated in ANY active session.
+    const allocation = await get("SELECT sa.id FROM shed_allocations sa JOIN event_sessions es ON sa.event_session_id = es.id WHERE sa.shed_id = ? AND es.is_active = 1", [id]);
     if (allocation) {
-      return res.status(400).send('Cannot delete a shed that is currently allocated. Please de-allocate it first.');
+      req.session.flash = { type: 'danger', message: 'Cannot deactivate a shed that is currently allocated in an active session. Please de-allocate it first.' };
+      return res.redirect('/shed/manage');
     }
-    // If not allocated, proceed with deletion.
-    await run('DELETE FROM sheds WHERE id = ?', [id]);
-    res.redirect('/shed/manage');
+    await run('UPDATE sheds SET is_active = 0 WHERE id = ?', [id]);
+    req.session.flash = { type: 'success', message: 'Shed deactivated successfully.' };
+    return res.redirect('/shed/manage');
   } catch (err) {
-    console.error(`Error deleting shed #${id}:`, err.message);
-    res.status(500).send('Failed to delete shed.');
+    console.error(`Error deactivating shed #${id}:`, err.message);
+    res.status(500).send('Failed to deactivate shed.');
+  }
+});
+
+// POST: Reactivate a shed
+router.post('/reactivate/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await run('UPDATE sheds SET is_active = 1 WHERE id = ?', [id]);
+    res.redirect('/shed/manage?status=inactive');
+  } catch (err) {
+    console.error(`Error reactivating shed #${id}:`, err.message);
+    res.status(500).send('Failed to reactivate shed.');
   }
 });
 
@@ -197,9 +223,10 @@ router.get('/bill', async (req, res) => {
   try {
     const viewingSessionId = res.locals.viewingSession.id;
     const bookings = await all(`
-      SELECT b.id, b.exhibitor_name, s.name as space_name 
+      SELECT b.id, b.exhibitor_name, s.space_name 
       FROM bookings b
-      JOIN spaces s ON b.space_id = s.id
+      LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s 
+      ON b.id = s.booking_id
       WHERE b.event_session_id = ?
       ORDER BY b.exhibitor_name
     `);
@@ -260,8 +287,9 @@ router.get('/bill/edit/:id', async (req, res) => {
     // Fetch all bookings to populate the dropdown
     const bookings = await all(`
       SELECT b.id, b.exhibitor_name, s.name as space_name 
-      FROM bookings b
-      JOIN spaces s ON b.space_id = s.id
+      FROM bookings b 
+      LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s 
+      ON b.id = s.booking_id
       ORDER BY b.exhibitor_name
     `);
     res.render('editShedBill', { title: `Edit Shed Bill #${billId}`, bill, bookings });

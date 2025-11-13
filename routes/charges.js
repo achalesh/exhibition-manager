@@ -31,9 +31,10 @@ router.get('/add', async (req, res) => {
     // Fetch bookings and next receipt number in parallel
     const [bookings, lastReceipt] = await Promise.all([
       all(`
-        SELECT b.id, b.exhibitor_name, b.facia_name, s.name as space_name, (b.exhibitor_name || ' (' || s.name || ')') as display_name
+        SELECT b.id, b.exhibitor_name, b.facia_name, s.space_name, (b.exhibitor_name || ' (' || s.space_name || ')') as display_name
         FROM bookings b
-        JOIN spaces s ON b.space_id = s.id
+        LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s 
+        ON b.id = s.booking_id
         WHERE b.event_session_id = ? AND b.booking_status = 'active'
         ORDER BY b.exhibitor_name
       `, [res.locals.viewingSession.id]),
@@ -369,10 +370,11 @@ router.get('/receipt/:id', async (req, res) => {
         p.*,
         b.exhibitor_name,
         b.facia_name,
-        s.name as space_name
+        s.space_name
       FROM payments p
       JOIN bookings b ON p.booking_id = b.id
-      JOIN spaces s ON b.space_id = s.id
+      LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s 
+      ON b.id = s.booking_id
       WHERE p.id = ?
     `, [paymentId]);
 

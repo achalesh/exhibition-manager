@@ -6,20 +6,35 @@ const { isAdmin } = require('./auth');
 // GET: Show form to add/manage spaces
 router.get('/add', async (req, res) => {
   try {
+    const { status = 'active' } = req.query;
     const viewingSessionId = res.locals.viewingSession.id;
-    const spaces = await all(`
+    let sql = `
       SELECT 
         s.*,
         CASE WHEN b.id IS NOT NULL THEN 'Booked' ELSE 'Available' END as session_status
-      FROM spaces s 
-      LEFT JOIN bookings b ON s.id = b.space_id AND b.event_session_id = ? AND b.booking_status = 'active'
-      ORDER BY s.type, s.name
-    `, [viewingSessionId]);
+      FROM spaces s LEFT JOIN (
+        SELECT b.id, bs.space_id 
+        FROM bookings b 
+        JOIN booking_spaces bs ON b.id = bs.booking_id 
+        WHERE b.event_session_id = ? AND b.booking_status = 'active'
+      ) b ON s.id = b.space_id
+    `;
+    const params = [viewingSessionId];
+
+    if (status === 'active') {
+      sql += ' WHERE s.is_active = 1';
+    } else if (status === 'inactive') {
+      sql += ' WHERE s.is_active = 0';
+    }
+    sql += ' ORDER BY s.type, s.name';
+
+    const spaces = await all(sql, params);
     res.render('manageSpaces', {
       title: 'Manage Spaces',
       spaces: spaces || [],
       space: null, // For the add form
-      report_url: '/space/add'
+      report_url: '/space/add',
+      filters: { status }
     });
   } catch (err) {
     console.error('Error loading space management page:', err.message);
@@ -54,12 +69,13 @@ router.get('/edit/:id', async (req, res) => {
   try {
     const spaceToEdit = await get('SELECT * FROM spaces WHERE id = ?', [req.params.id]);
     const viewingSessionId = res.locals.viewingSession.id;
-    const allSpaces = await all(`
+    const allSpaces = await all(` 
       SELECT 
         s.*,
         CASE WHEN b.id IS NOT NULL THEN 'Booked' ELSE 'Available' END as session_status
-      FROM spaces s 
-      LEFT JOIN bookings b ON s.id = b.space_id AND b.event_session_id = ? AND b.booking_status = 'active'
+      FROM spaces s LEFT JOIN (
+        SELECT b.id, bs.space_id FROM bookings b JOIN booking_spaces bs ON b.id = bs.booking_id WHERE b.event_session_id = ? AND b.booking_status = 'active'
+      ) b ON s.id = b.space_id
       ORDER BY s.type, name
     `, [viewingSessionId]);
 
@@ -103,24 +119,44 @@ router.post('/edit/:id', async (req, res) => {
 router.post('/delete/:id', async (req, res) => {
   const { id } = req.params;
 
-  if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
-    req.session.flash = { type: 'warning', message: 'Cannot delete spaces from an archived session.' };
-    return res.redirect('/space/add');
-  }
+  // This check is now more flexible. We check against all sessions.
+  // if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
+  //   req.session.flash = { type: 'warning', message: 'Cannot delete spaces from an archived session.' };
+  //   return res.redirect('/space/add');
+  // }
 
   try {
-    // Check if the space is currently booked
-    const booking = await get("SELECT id FROM bookings WHERE space_id = ? AND booking_status = 'active'", [id]);
+    // Check if the space is currently booked in ANY session.
+    const booking = await get(`
+      SELECT b.id FROM bookings b 
+      JOIN booking_spaces bs ON b.id = bs.booking_id
+      JOIN event_sessions es ON b.event_session_id = es.id 
+      WHERE bs.space_id = ? AND b.booking_status = 'active' AND es.is_active = 1
+    `, [id]);
     if (booking) {
-      req.session.flash = { type: 'danger', message: 'Cannot delete a space that is currently booked. Please cancel the booking first.' };
+      req.session.flash = { type: 'danger', message: 'Cannot deactivate a space that is currently booked in an active session. Please cancel the booking first.' };
       return res.redirect('/space/add');
     }
-    await run('DELETE FROM spaces WHERE id = ?', [id]);
-    req.session.flash = { type: 'success', message: 'Space deleted successfully.' };
-    res.redirect('/space/add');
+    await run('UPDATE spaces SET is_active = 0 WHERE id = ?', [id]);
+    req.session.flash = { type: 'success', message: 'Space deactivated successfully. It will no longer be available for new bookings.' };
+    return res.redirect('/space/add');
   } catch (err) {
     console.error(`Error deleting space #${id}:`, err.message);
     res.status(500).send('Failed to delete space.');
+  }
+});
+
+// POST: Reactivate a space
+router.post('/reactivate/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await run('UPDATE spaces SET is_active = 1 WHERE id = ?', [id]);
+    req.session.flash = { type: 'success', message: 'Space reactivated successfully. It is now available for new bookings.' };
+    return res.redirect('/space/add?status=inactive');
+  } catch (err) {
+    console.error(`Error reactivating space #${id}:`, err.message);
+    req.session.flash = { type: 'danger', message: 'Failed to reactivate space.' };
+    res.status(500).send('Failed to reactivate space.');
   }
 });
 
@@ -134,9 +170,12 @@ router.get('/api/spaces-with-status', async (req, res) => {
       SELECT 
         s.id, s.name, s.type, s.rent_amount,
         CASE WHEN b.id IS NOT NULL THEN 'Booked' ELSE 'Available' END as status
-      FROM spaces s
-      LEFT JOIN (SELECT id, space_id FROM bookings WHERE event_session_id = ? AND booking_status = 'active') b 
-        ON s.id = b.space_id
+      FROM spaces s LEFT JOIN (
+        SELECT b.id, bs.space_id 
+        FROM bookings b 
+        JOIN booking_spaces bs ON b.id = bs.booking_id 
+        WHERE b.event_session_id = ? AND b.booking_status = 'active'
+      ) b ON s.id = b.space_id
       ORDER BY s.type, s.name;
     `, [viewingSessionId]);
 
@@ -155,30 +194,25 @@ router.get('/diagnostics/conflicts', isAdmin, async (req, res) => {
     // 1. Get all spaces
     const allSpaces = await all('SELECT id, name, type FROM spaces ORDER BY type, name');
 
+    // Pre-fetch all booked space IDs for the current session to avoid N+1 queries
+    const bookedSpaceIdsResult = await all(
+      `SELECT DISTINCT bs.space_id as id 
+       FROM booking_spaces bs 
+       JOIN bookings b ON bs.booking_id = b.id 
+       WHERE b.event_session_id = ? AND b.booking_status = 'active'`,
+      [viewingSessionId]
+    );
+    const bookedSpaceIds = new Set(bookedSpaceIdsResult.map(r => r.id));
+
     const diagnosticPromises = allSpaces.map(async (space) => {
-      // 2. For each space, run multiple checks
-      const [
-        activeBookings,
-        inactiveBookings,
-        dashboardStatusResult,
-        bookingFormResult
-      ] = await Promise.all([
-        get("SELECT COUNT(*) as count FROM bookings WHERE space_id = ? AND event_session_id = ? AND booking_status = 'active'", [space.id, viewingSessionId]),
-        get("SELECT COUNT(*) as count FROM bookings WHERE space_id = ? AND event_session_id = ? AND booking_status IN ('cancelled', 'vacated')", [space.id, viewingSessionId]),
-        get("SELECT CASE WHEN b.id IS NOT NULL THEN 'Booked' ELSE 'Available' END as status FROM spaces s LEFT JOIN (SELECT id, space_id FROM bookings WHERE event_session_id = ? AND booking_status = 'active') b ON s.id = b.space_id WHERE s.id = ?", [viewingSessionId, space.id]),
-        get("SELECT CASE WHEN EXISTS (SELECT 1 FROM bookings WHERE space_id = ? AND event_session_id = ? AND booking_status = 'active') THEN 'Booked' ELSE 'Available' END as status", [space.id, viewingSessionId])
-      ]);
+      const isBooked = bookedSpaceIds.has(space.id);
+      const dashboardStatus = isBooked ? 'Booked' : 'Available';
+      const bookingFormStatus = isBooked ? 'Booked' : 'Available';
 
-      const dashboardStatus = dashboardStatusResult.status;
-      // The booking form logic is "is it available?", so if it's booked, it's not available.
-      const bookingFormStatus = bookingFormResult.status;
-
-      const isConflict = (dashboardStatus !== bookingFormStatus) || (activeBookings.count > 1);
+      const isConflict = (dashboardStatus !== bookingFormStatus);
 
       return {
         ...space,
-        active_bookings_count: activeBookings.count,
-        inactive_bookings_count: inactiveBookings.count,
         dashboard_status: dashboardStatus,
         booking_form_status: bookingFormStatus,
         is_conflict: isConflict

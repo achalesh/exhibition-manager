@@ -5,23 +5,16 @@ const { db, all, get, run } = require('../db-helpers');
 // GET: Show unified booking form, load ALL spaces
 router.get('/add', async (req, res) => {
   try {
-    const viewingSessionId = res.locals.viewingSession.id;
-    // Fetch available spaces and suggestion data in parallel
-    const [availableSpaces, exhibitors, productCategories, faciaNames] = await Promise.all([
-      // Fetch only spaces that are NOT actively booked in the current session.
-      // This is the most direct way to ensure only available spaces are listed.
-      all(`
-        SELECT id, name, type, rent_amount FROM spaces 
-        WHERE id NOT IN (SELECT space_id FROM bookings WHERE event_session_id = ? AND booking_status = 'active')
-        ORDER BY type, name`, [viewingSessionId]),
+    // Fetch suggestion data in parallel
+    const [exhibitors, productCategories, faciaNames] = await Promise.all([
       all('SELECT DISTINCT name FROM clients ORDER BY name'),
       all('SELECT DISTINCT product_category FROM bookings WHERE product_category IS NOT NULL ORDER BY product_category'),
       all('SELECT DISTINCT facia_name FROM bookings WHERE facia_name IS NOT NULL ORDER BY facia_name')
     ]);
 
-    res.render('bookSpace', {
-      title: 'Book a Space',
-      spaces: availableSpaces || [], // Use the correct list of available spaces
+    // This form is now for registering an exhibitor, not booking a specific space.
+    res.render('registerExhibitor', {
+      title: 'Register New Exhibitor',
       suggestions: {
         exhibitors: exhibitors.map(e => e.name),
         productCategories: productCategories.map(pc => pc.product_category),
@@ -30,48 +23,28 @@ router.get('/add', async (req, res) => {
     });
   } catch (err) {
     console.error(err.message);
-    res.status(500).send('Error loading spaces');
-  }
-});
-
-// GET: Booking details for a specific space
-router.get('/details/:space_id', async (req, res) => {
-  const spaceId = req.params.space_id;
-  const sql = `
-    SELECT * FROM bookings WHERE space_id = ? AND booking_status = 'active' ORDER BY booking_date DESC LIMIT 1
-  `;
-  try {
-    const booking = await get(sql, [spaceId]);
-    res.json(booking || null);
-  } catch (err) {
-    res.status(500).json({ error: 'Database error' });
+    res.status(500).send('Error loading registration page');
   }
 });
 
 // POST: Save booking
 router.post('/add', async (req, res) => {
   const {
-    space_id, exhibitor_name, facia_name, product_category,
+    exhibitor_name, facia_name, product_category,
     contact_person, full_address, contact_number, secondary_number,
-    id_proof, rent_amount, discount, advance_amount, due_amount, form_submitted
+    id_proof, advance_amount, form_submitted
   } = req.body;
 
   if (res.locals.viewingSession.id !== res.locals.activeSession.id) {
     req.session.flash = { type: 'warning', message: 'Cannot add bookings to an archived session. Please switch to the active session.' };
-    return res.redirect('/booking/add');
+    return res.redirect('/booking/list');
   }
 
   const activeSessionId = res.locals.activeSession.id;
 
   const formSubmittedStatus = form_submitted ? 1 : 0;
-  if (!space_id || !exhibitor_name || !contact_person || !contact_number) { // Basic validation
-    return res.status(400).send('Missing required fields: space, exhibitor name, contact person, and contact number are required.');
-  }
-
-  // Check if the space is already actively booked in this session
-  const existingBooking = await get('SELECT id FROM bookings WHERE space_id = ? AND event_session_id = ? AND booking_status = ?', [space_id, activeSessionId, 'active']);
-  if (existingBooking) {
-    req.session.flash = { type: 'danger', message: 'This space is already actively booked. Please vacate the previous exhibitor first.' };
+  if (!exhibitor_name || !contact_person || !contact_number) { // Basic validation
+    req.session.flash = { type: 'danger', message: 'Exhibitor Name, Contact Person, and Contact Number are required.' };
     return res.redirect('/booking/add');
   }
 
@@ -93,16 +66,17 @@ router.post('/add', async (req, res) => {
       // Step 2: Create booking
       const bookingSql = `
         INSERT INTO bookings (
-          space_id, client_id, booking_date, exhibitor_name, facia_name, product_category,
+          client_id, booking_date, exhibitor_name, facia_name, product_category,
           contact_person, full_address, contact_number, secondary_number, id_proof, event_session_id,
-          rent_amount, discount, advance_amount, due_amount, form_submitted
-        ) VALUES (?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          rent_amount, discount, advance_amount, due_amount, form_submitted, booking_status
+        ) VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 0, ?, 'unallocated')
       `;
-      const bookingParams = [space_id, clientId, exhibitor_name, facia_name, product_category, contact_person, full_address, contact_number, secondary_number, id_proof, activeSessionId, rent_amount, discount, advance_amount, due_amount, formSubmittedStatus];
-      const { lastID: bookingId } = await run(bookingSql, bookingParams);
+      const bookingParams = [clientId, exhibitor_name, facia_name, product_category, contact_person, full_address, contact_number, secondary_number, id_proof, activeSessionId, advance_amount || 0, formSubmittedStatus];
+      await run(bookingSql, bookingParams);
 
       db.run('COMMIT');
-      res.redirect(`/booking/confirmation/${bookingId}`);
+      req.session.flash = { type: 'success', message: `Exhibitor "${exhibitor_name}" has been registered and is awaiting space allocation.` };
+      res.redirect('/booking/list');
 
     } catch (err) {
       console.error("Error during booking transaction:", err.message);
@@ -115,14 +89,14 @@ router.post('/add', async (req, res) => {
 // GET: Booking list
 router.get('/list', async (req, res) => {
   const viewingSessionId = res.locals.viewingSession.id;
-  const { form_status = 'all', q } = req.query;
+  const { form_status = 'all', q, booking_status = 'all' } = req.query;
   const whereClauses = ['b.event_session_id = ?'];
   const params = [viewingSessionId];
 
   if (q) {
-    whereClauses.push('(b.exhibitor_name LIKE ? OR b.facia_name LIKE ? OR s.name LIKE ?)');
+    whereClauses.push('(b.exhibitor_name LIKE ? OR b.facia_name LIKE ? OR s.space_name LIKE ? OR b.id LIKE ?)');
     const searchTerm = `%${q}%`;
-    params.push(searchTerm, searchTerm, searchTerm);
+    params.push(searchTerm, searchTerm, searchTerm, searchTerm);
   }
 
   if (form_status === 'submitted') {
@@ -131,36 +105,46 @@ router.get('/list', async (req, res) => {
     whereClauses.push('b.form_submitted = 0');
   }
 
+  if (booking_status && booking_status !== 'all') {
+    whereClauses.push('b.booking_status = ?');
+    params.push(booking_status);
+  }
+
   // Simplified query to fetch booking list without calculating due amounts.
   const sql = `
     SELECT
-      b.id,
+      b.id, b.booking_status,
       b.exhibitor_name AS client_name,
       b.facia_name,
       b.contact_number,
       b.secondary_number,
-      s.name AS space_name,
-      s.size as space_size,
-      s.type as space_type,
+      GROUP_CONCAT(s.name, ', ') AS space_name,
+      GROUP_CONCAT(s.size, ', ') as space_size,
+      GROUP_CONCAT(s.type, ', ') as space_type,
       b.form_submitted
     FROM bookings b
-    JOIN spaces s ON b.space_id = s.id
+    LEFT JOIN booking_spaces bs ON b.id = bs.booking_id
+    LEFT JOIN spaces s ON bs.space_id = s.id
     WHERE ${whereClauses.join(' AND ')}
-    ORDER BY
-      CASE s.type WHEN 'Pavilion' THEN 1 WHEN 'Stall' THEN 2 WHEN 'Booth' THEN 3 ELSE 4 END, s.name
+    GROUP BY b.id
+    ORDER BY b.id DESC
   `;
   try {
     const bookings = await all(sql, params);
     res.render('bookings', { 
       title: 'View Bookings', 
-      bookings, 
-      currentFilter: form_status, 
-      filters: { q: q || '' },
+      bookings,
+      filters: { 
+        q: q || '',
+        form_status,
+        booking_status
+      },
       message: req.query.message 
     });
   } catch (err) {
     console.error("Error fetching bookings:", err.message);
-    res.render('bookings', { title: 'View Bookings', bookings: [], currentFilter: form_status, filters: { q: q || '' }, message: null });
+    const filters = { q: q || '', form_status, booking_status };
+    res.render('bookings', { title: 'View Bookings', bookings: [], filters, message: null });
   }
 });
 
@@ -170,7 +154,7 @@ router.get('/confirmation/:id', async (req, res) => {
   const sql = `
     SELECT b.id, b.exhibitor_name, b.rent_amount, b.due_amount, s.name AS space_name, s.type as space_type
     FROM bookings b
-    JOIN spaces s ON b.space_id = s.id
+    LEFT JOIN booking_spaces bs ON b.id = bs.booking_id LEFT JOIN spaces s ON bs.space_id = s.id
     WHERE b.id = ?
   `;
   try {
@@ -196,10 +180,13 @@ router.get('/details-full/:id', async (req, res) => {
     const orderedBookingsSql = `
       SELECT b.id
       FROM bookings b
-      JOIN spaces s ON b.space_id = s.id
-      WHERE b.event_session_id = ?
+      LEFT JOIN booking_spaces bs ON b.id = bs.booking_id
+      LEFT JOIN spaces s ON bs.space_id = s.id
+      WHERE b.event_session_id = ? AND b.booking_status <> 'cancelled'
+      GROUP BY b.id
       ORDER BY
-        CASE s.type
+        CASE WHEN MIN(s.id) IS NULL THEN 1 ELSE 0 END,
+        CASE s.type 
           WHEN 'Pavilion' THEN 1
           WHEN 'Stall' THEN 2
           WHEN 'Booth' THEN 3
@@ -216,16 +203,40 @@ router.get('/details-full/:id', async (req, res) => {
 
     // Fetch booking, client, and space details
     const bookingSql = `
-      SELECT b.*, c.name as client_name, s.name as space_name, s.type as space_type
+      SELECT b.*, c.name as client_name, s.space_name, s.space_type
       FROM bookings b
       JOIN clients c ON b.client_id = c.id
-      JOIN spaces s ON b.space_id = s.id
+      LEFT JOIN (SELECT booking_id, GROUP_CONCAT(s.name, ', ') as space_name, GROUP_CONCAT(s.type, ', ') as space_type FROM booking_spaces bs JOIN spaces s ON bs.space_id = s.id GROUP BY booking_id) s ON b.id = s.booking_id
       WHERE b.id = ? AND b.event_session_id = ?
     `;
     const booking = await get(bookingSql, [bookingId, viewingSessionId]);
 
     if (!booking) {
       return res.status(404).send('Booking not found.');
+    }
+
+    // Check if this booking was re-booked from a previous one
+    let rebookedFromInfo = null;
+    if (booking.rebooked_from_booking_id) {
+      rebookedFromInfo = await get(`
+        SELECT b.id as original_booking_id, es.name as session_name, b.event_session_id as original_session_id
+        FROM bookings b
+        JOIN event_sessions es ON b.event_session_id = es.id
+        WHERE b.id = ?
+      `, [booking.rebooked_from_booking_id]);
+    }
+
+
+    // If the booking is unallocated, fetch available spaces for the allocation form
+    let availableSpaces = [];
+    if (booking.booking_status === 'unallocated') {
+      availableSpaces = await all(`
+        SELECT id, name, type, rent_amount 
+        FROM spaces 
+        WHERE is_active = 1 AND id NOT IN (
+          SELECT bs.space_id FROM booking_spaces bs JOIN bookings b ON bs.booking_id = b.id WHERE b.event_session_id = ? AND b.booking_status = 'active' AND bs.space_id IS NOT NULL
+        )
+        ORDER BY type, name`, [viewingSessionId]);
     }
 
     // Fetch related material issues
@@ -268,30 +279,43 @@ router.get('/details-full/:id', async (req, res) => {
 
 
     // --- Detailed Financial Calculations ---
-
-    // 1. Calculate total charges for each category
-    const rentCharged = (booking.rent_amount || 0);
-    const electricCharged = electricBills.reduce((sum, bill) => sum + (bill.total_amount || 0), 0);
-    const materialCharged = materials.reduce((sum, issue) => sum + (issue.total_payable || 0), 0);
-    const shedRentFromAllocation = (await get('SELECT SUM(s.rent) as total FROM shed_allocations sa JOIN sheds s ON sa.shed_id = s.id WHERE sa.booking_id = ? AND sa.event_session_id = ?', [bookingId, viewingSessionId]))?.total || 0;
-    const shedRentFromBills = (await get('SELECT SUM(amount) as total FROM shed_bills WHERE booking_id = ? AND event_session_id = ?', [bookingId, viewingSessionId]))?.total || 0;
-    const shedCharged = shedRentFromAllocation + shedRentFromBills;
-    
-    // 2. Calculate total payments for each category (using the raw query result)
-    const payments = await get('SELECT SUM(rent_paid) as rent, SUM(electric_paid) as electric, SUM(material_paid) as material, SUM(shed_paid) as shed FROM payments WHERE booking_id = ? AND event_session_id = ?', [bookingId, viewingSessionId]);
-    const rentPaid = (payments?.rent || 0) + (booking.advance_amount || 0); // Include advance in rent paid
-    const electricPaid = payments?.electric || 0;
-    const materialPaid = payments?.material || 0;
-    const shedPaid = payments?.shed || 0;
-    const totalWriteOffs = (await get('SELECT SUM(amount) as total FROM write_offs WHERE booking_id = ? AND event_session_id = ?', [bookingId, viewingSessionId]))?.total || 0;
+    const financialSummarySql = `
+      SELECT
+        -- Rent
+        (b.rent_amount - COALESCE(b.discount, 0)) as rent_charged,
+        (COALESCE(p.total_rent_paid, 0) + COALESCE(b.advance_amount, 0)) as rent_paid,
+        -- Electric
+        COALESCE(eb.total_electric_charge, 0) as electric_charged,
+        COALESCE(p.total_electric_paid, 0) as electric_paid,
+        -- Material
+        COALESCE(mi.total_material_charge, 0) as material_charged,
+        COALESCE(p.total_material_paid, 0) as material_paid,
+        -- Shed
+        COALESCE(sh.total_shed_charge, 0) as shed_charged,
+        COALESCE(p.total_shed_paid, 0) as shed_paid,
+        -- Write Offs
+        COALESCE(wo.total_write_offs, 0) as write_offs
+      FROM bookings b
+      LEFT JOIN (
+        SELECT booking_id, SUM(rent_paid) as total_rent_paid, SUM(electric_paid) as total_electric_paid, SUM(material_paid) as total_material_paid, SUM(shed_paid) as total_shed_paid
+        FROM payments WHERE booking_id = ? AND event_session_id = ? GROUP BY booking_id
+      ) p ON b.id = p.booking_id
+      LEFT JOIN (SELECT booking_id, SUM(total_amount) as total_electric_charge FROM electric_bills WHERE booking_id = ? AND event_session_id = ? GROUP BY booking_id) eb ON b.id = eb.booking_id
+      LEFT JOIN (SELECT client_id, SUM(total_payable) as total_material_charge FROM material_issues WHERE client_id = ? AND event_session_id = ? GROUP BY client_id) mi ON b.client_id = mi.client_id
+      LEFT JOIN (SELECT booking_id, SUM(rent) as total_shed_charge FROM (SELECT sa.booking_id, s.rent FROM shed_allocations sa JOIN sheds s ON sa.shed_id = s.id WHERE sa.booking_id = ? AND sa.event_session_id = ? UNION ALL SELECT sb.booking_id, sb.amount as rent FROM shed_bills sb WHERE sb.booking_id = ? AND sb.event_session_id = ?) GROUP BY booking_id) sh ON b.id = sh.booking_id
+      LEFT JOIN (SELECT booking_id, SUM(amount) as total_write_offs FROM write_offs WHERE booking_id = ? AND event_session_id = ? GROUP BY booking_id) wo ON b.id = wo.booking_id
+      WHERE b.id = ?
+    `;
+    const financialParams = [bookingId, viewingSessionId, bookingId, viewingSessionId, booking.client_id, viewingSessionId, bookingId, viewingSessionId, bookingId, viewingSessionId, bookingId, viewingSessionId, bookingId];
+    const financials = await get(financialSummarySql, financialParams);
 
     // 3. Attach financial summary to booking object
     booking.financials = {
-      rent: { charged: rentCharged, paid: rentPaid, due: rentCharged - (booking.discount || 0) - rentPaid }, // Discount is only on rent
-      electric: { charged: electricCharged, paid: electricPaid, due: electricCharged - electricPaid },
-      material: { charged: materialCharged, paid: materialPaid, due: materialCharged - materialPaid },
-      shed: { charged: shedCharged, paid: shedPaid, due: shedCharged - shedPaid },
-      write_offs: { amount: totalWriteOffs }
+      rent: { charged: financials.rent_charged, paid: financials.rent_paid, due: financials.rent_charged - (booking.discount || 0) - financials.rent_paid },
+      electric: { charged: financials.electric_charged, paid: financials.electric_paid, due: financials.electric_charged - financials.electric_paid },
+      material: { charged: financials.material_charged, paid: financials.material_paid, due: financials.material_charged - financials.material_paid },
+      shed: { charged: financials.shed_charged, paid: financials.shed_paid, due: financials.shed_charged - financials.shed_paid },
+      write_offs: { amount: financials.write_offs }
     };
 
     // Fetch count of issued materials for the link
@@ -302,15 +326,278 @@ router.get('/details-full/:id', async (req, res) => {
       booking,
       materials,
       electricBills,
+      availableSpaces,
       shedAllocations,
       previousId,
       nextId,
-      issuedMaterialCount
+      issuedMaterialCount,
+      rebookedFromInfo
     });
 
+    // After rendering, mark any user notifications as read
+    if (rebookedFromInfo) {
+      await run(
+        'UPDATE bookings SET rebooked_from_booking_id = NULL WHERE id = ? AND rebooked_from_booking_id IS NOT NULL',
+        [bookingId]
+      );
+    }
   } catch (err) {
     console.error('Error fetching full booking details:', err.message);
     res.status(500).send('Error loading booking details.');
+  }
+});
+
+// POST /booking/allocate/:id - Allocate a space to an unallocated booking
+router.post('/allocate/:id', async (req, res) => {
+  const bookingId = req.params.id;
+  let { space_ids, discount } = req.body;
+  const activeSessionId = res.locals.activeSession.id;
+
+  if (res.locals.viewingSession.id !== activeSessionId) {
+    req.session.flash = { type: 'warning', message: 'Cannot allocate spaces in an archived session.' };
+    return res.redirect(`/booking/details-full/${bookingId}`);
+  }
+
+  // Ensure space_ids is an array
+  if (!space_ids) {
+    req.session.flash = { type: 'danger', message: 'You must select a space to allocate.' };
+    return res.redirect(`/booking/details-full/${bookingId}`);
+  }
+  if (!Array.isArray(space_ids)) {
+    space_ids = [space_ids];
+  }
+
+  db.serialize(async () => {
+    try {
+      db.run('BEGIN TRANSACTION');
+
+      let totalRent = 0;
+      for (const spaceId of space_ids) {
+        // Concurrency check: Make sure each space is still available
+        const existingAllocation = await get("SELECT bs.id FROM booking_spaces bs JOIN bookings b ON bs.booking_id = b.id WHERE bs.space_id = ? AND b.event_session_id = ? AND b.booking_status = 'active'", [spaceId, activeSessionId]);
+        if (existingAllocation) {
+          throw new Error(`Space ID ${spaceId} was just booked by someone else. Please try again.`);
+        }
+
+        // Add to new booking_spaces table
+        await run('INSERT INTO booking_spaces (booking_id, space_id) VALUES (?, ?)', [bookingId, spaceId]);
+
+        // Add rent to total
+        const space = await get('SELECT rent_amount FROM spaces WHERE id = ?', [spaceId]);
+        totalRent += space.rent_amount || 0;
+      }
+
+      const booking = await get('SELECT advance_amount FROM bookings WHERE id = ?', [bookingId]);
+
+      const discountAmount = parseFloat(discount) || 0;
+      const advanceAmount = booking.advance_amount || 0;
+      const dueAmount = totalRent - discountAmount - advanceAmount;
+
+      await run(
+        "UPDATE bookings SET rent_amount = ?, discount = ?, due_amount = ?, booking_status = 'active' WHERE id = ?",
+        [totalRent, discountAmount, dueAmount, bookingId]
+      );
+
+      db.run('COMMIT');
+      req.session.flash = { type: 'success', message: 'Space allocated successfully!' };
+      res.redirect(`/booking/details-full/${bookingId}`);
+    } catch (err) {
+      db.run('ROLLBACK');
+      req.session.flash = { type: 'danger', message: err.message || 'Failed to allocate space due to a server error.' };
+      res.redirect(`/booking/details-full/${bookingId}`);
+    }
+  });
+});
+
+// POST /booking/deallocate-space/:booking_id/:space_id - De-allocate a single space from a multi-space booking
+router.post('/deallocate-space/:booking_id/:space_id', async (req, res) => {
+  const { booking_id, space_id } = req.params;
+  const activeSessionId = res.locals.activeSession.id;
+
+  if (res.locals.viewingSession.id !== activeSessionId) {
+    req.session.flash = { type: 'warning', message: 'Cannot de-allocate spaces in an archived session.' };
+    return res.redirect(`/booking/details-full/${booking_id}`);
+  }
+
+  db.serialize(async () => {
+    try {
+      db.run('BEGIN TRANSACTION');
+
+      // 1. Check how many spaces are currently allocated
+      const allocatedSpaces = await all('SELECT space_id FROM booking_spaces WHERE booking_id = ?', [booking_id]);
+      if (allocatedSpaces.length <= 1) {
+        throw new Error('Cannot de-allocate the last space. Use the "De-allocate All" button instead.');
+      }
+
+      // 2. Get the rent of the space being removed
+      const spaceToDeallocate = await get('SELECT rent_amount FROM spaces WHERE id = ?', [space_id]);
+      if (!spaceToDeallocate) {
+        throw new Error('The space you are trying to de-allocate does not exist.');
+      }
+      const rentToSubtract = spaceToDeallocate.rent_amount || 0;
+
+      // 3. Get current booking financials
+      const booking = await get('SELECT rent_amount, discount, due_amount FROM bookings WHERE id = ?', [booking_id]);
+
+      // 4. Remove the specific space from the booking
+      const result = await run('DELETE FROM booking_spaces WHERE booking_id = ? AND space_id = ?', [booking_id, space_id]);
+      if (result.changes === 0) {
+        throw new Error('Space was not allocated to this booking.');
+      }
+
+      // 5. Update the booking's financials
+      // When a space is removed, we also remove any existing discount.
+      const existingDiscount = booking.discount || 0;
+      const newRentAmount = (booking.rent_amount || 0) - rentToSubtract;
+      // The due amount is reduced by the rent of the removed space, but increased by the removed discount.
+      const newDueAmount = (booking.due_amount || 0) - rentToSubtract + existingDiscount;
+
+      await run(
+        'UPDATE bookings SET rent_amount = ?, discount = 0, due_amount = ? WHERE id = ?',
+        [newRentAmount, newDueAmount, booking_id]
+      );
+
+      db.run('COMMIT');
+      req.session.flash = { type: 'success', message: 'One space has been de-allocated successfully.' };
+      res.redirect(`/booking/details-full/${booking_id}`);
+    } catch (err) {
+      db.run('ROLLBACK');
+      req.session.flash = { type: 'danger', message: err.message || 'Failed to de-allocate space due to a server error.' };
+      res.redirect(`/booking/details-full/${booking_id}`);
+    }
+  });
+});
+
+// POST /booking/deallocate/:id - De-allocate a space from a booking, reverting it to 'unallocated' status
+router.post('/deallocate/:id', async (req, res) => {
+  const bookingId = req.params.id;
+  const activeSessionId = res.locals.activeSession.id;
+
+  if (res.locals.viewingSession.id !== activeSessionId) {
+    req.session.flash = { type: 'warning', message: 'Cannot de-allocate spaces in an archived session.' };
+    return res.redirect(`/booking/details-full/${bookingId}`);
+  }
+
+  db.serialize(async () => {
+    try {
+      db.run('BEGIN TRANSACTION');
+
+      const booking = await get("SELECT advance_amount, booking_status FROM bookings WHERE id = ?", [bookingId]);
+      if (!booking || booking.booking_status !== 'active') {
+        throw new Error('This booking is not active and cannot be de-allocated.');
+      }
+
+      // Calculate the new due amount. It will be negative if an advance was paid.
+      const advanceAmount = booking.advance_amount || 0;
+      const newDueAmount = 0 - advanceAmount;
+
+      await run("UPDATE bookings SET rent_amount = 0, discount = 0, due_amount = ?, booking_status = 'unallocated' WHERE id = ?", [newDueAmount, bookingId]);
+      await run("DELETE FROM booking_spaces WHERE booking_id = ?", [bookingId]);
+
+      db.run('COMMIT');
+      req.session.flash = { type: 'success', message: 'Space de-allocated successfully. The exhibitor is now awaiting a new space.' };
+      res.redirect(`/booking/details-full/${bookingId}`);
+    } catch (err) {
+      db.run('ROLLBACK');
+      req.session.flash = { type: 'danger', message: err.message || 'Failed to de-allocate space due to a server error.' };
+      res.redirect(`/booking/details-full/${bookingId}`);
+    }
+  });
+});
+
+// GET: Show page to re-book an exhibitor for a new session
+router.get('/rebook/:id', async (req, res) => {
+  const bookingId = req.params.id;
+  const currentSessionId = res.locals.viewingSession.id;
+
+  try {
+    const booking = await get(`
+      SELECT b.id, b.client_id, b.exhibitor_name, b.facia_name, b.product_category, b.contact_person, b.full_address, b.contact_number, b.secondary_number, b.id_proof, b.form_submitted
+      FROM bookings b
+      WHERE b.id = ?
+    `, [bookingId]);
+
+    if (!booking) {
+      req.session.flash = { type: 'danger', message: 'Booking not found.' };
+      return res.redirect('/booking/list');
+    }
+
+    // Get all sessions except the one this booking is currently in
+    const sessionsData = await all('SELECT id, name, is_active FROM event_sessions WHERE id != ? ORDER BY start_date DESC', [currentSessionId]);
+
+    const sessions = sessionsData.map(s => ({
+      ...s,
+      status: s.is_active ? 'Active' : 'Archived'
+    }));
+
+    res.render('rebookExhibitor', {
+      title: `Re-book ${booking.exhibitor_name}`,
+      booking,
+      sessions
+    });
+  } catch (err) {
+    console.error('Error loading re-book page:', err.message);
+    res.status(500).send('Error loading page.');
+  }
+});
+
+// POST: Process the re-booking of an exhibitor to a new session
+router.post('/rebook/:id', async (req, res) => {
+  const originalBookingId = req.params.id;
+  const { target_session_id } = req.body;
+
+  if (!target_session_id) {
+    req.session.flash = { type: 'danger', message: 'You must select a target session.' };
+    return res.redirect(`/booking/rebook/${originalBookingId}`);
+  }
+
+  try {
+    // 1. Get the original booking data to copy
+    const originalBooking = await get(`
+      SELECT client_id, exhibitor_name, facia_name, product_category, contact_person, full_address, contact_number, secondary_number, id_proof, form_submitted
+      FROM bookings
+      WHERE id = ?
+    `, [originalBookingId]);
+
+    if (!originalBooking) {
+      req.session.flash = { type: 'danger', message: 'Original booking not found.' };
+      return res.redirect('/booking/list');
+    }
+
+    // 2. Check if a booking for this client already exists in the target session to prevent duplicates
+    const existingBookingInNewSession = await get(
+      'SELECT id FROM bookings WHERE client_id = ? AND event_session_id = ?',
+      [originalBooking.client_id, target_session_id]
+    );
+
+    if (existingBookingInNewSession) {
+      req.session.flash = { type: 'warning', message: `This exhibitor already has a booking (ID: ${existingBookingInNewSession.id}) in the selected session.` };
+      return res.redirect(`/booking/details-full/${existingBookingInNewSession.id}?view_session_id=${target_session_id}`);
+    }
+
+    // 3. Create the new booking record in the target session
+    const newBookingSql = `
+      INSERT INTO bookings (
+        client_id, booking_date, exhibitor_name, facia_name, product_category,
+        contact_person, full_address, contact_number, secondary_number, id_proof,
+        event_session_id, booking_status,
+        rent_amount, discount, advance_amount, due_amount, form_submitted, rebooked_from_booking_id
+      ) VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unallocated', 0, 0, 0, 0, ?, ?)
+    `;
+    const params = [
+      originalBooking.client_id, originalBooking.exhibitor_name, originalBooking.facia_name,
+      originalBooking.product_category, originalBooking.contact_person, originalBooking.full_address,
+      originalBooking.contact_number, originalBooking.secondary_number, originalBooking.id_proof,
+      target_session_id, originalBooking.form_submitted, originalBookingId
+    ];
+    const { lastID: newBookingId } = await run(newBookingSql, params);
+
+    req.session.flash = { type: 'success', message: `Successfully re-booked ${originalBooking.exhibitor_name} for the new session.` };
+    res.redirect(`/booking/details-full/${newBookingId}?view_session_id=${target_session_id}`);
+  } catch (err) {
+    console.error('Error processing re-booking:', err.message);
+    req.session.flash = { type: 'danger', message: 'Failed to re-book exhibitor.' };
+    res.redirect(`/booking/rebook/${originalBookingId}`);
   }
 });
 
@@ -319,9 +606,15 @@ router.get('/details-full-by-space/:space_id', async (req, res) => {
   const spaceId = req.params.space_id;
   const viewingSessionId = res.locals.viewingSession.id;
   try {
-    const booking = await get("SELECT id FROM bookings WHERE space_id = ? AND event_session_id = ? AND booking_status = 'active' ORDER BY booking_date DESC LIMIT 1", [spaceId, viewingSessionId]);
+    // Corrected query to join through booking_spaces and specify the space_id
+    const booking = await get(`
+      SELECT b.id 
+      FROM bookings b
+      JOIN booking_spaces bs ON b.id = bs.booking_id
+      WHERE bs.space_id = ? AND b.event_session_id = ? AND b.booking_status = 'active' 
+      ORDER BY b.booking_date DESC LIMIT 1`, [spaceId, viewingSessionId]);
     if (booking) {
-      res.redirect(`/booking/details-full/${booking.id}`);
+      return res.redirect(`/booking/details-full/${booking.id}`);
     } else {
       // If no booking, maybe redirect to the space booking page or show a message
       req.app.locals.message = 'This space is available and has no booking history.';
@@ -475,12 +768,6 @@ router.post('/write-off/:id', async (req, res) => {
       db.run('BEGIN TRANSACTION');
       // 1. Record the write-off
       await run('INSERT INTO write_offs (booking_id, amount, reason, write_off_date, user_id, event_session_id) VALUES (?, ?, ?, date("now"), ?, ?)', [bookingId, writeOffAmount, reason, user.id, activeSessionId]);
-      // 2. Reduce the due amount on the booking
-      await run('UPDATE bookings SET due_amount = due_amount - ? WHERE id = ?', [writeOffAmount, bookingId]);
-      // 3. Add to accounting ledger as an expenditure
-      const booking = await get('SELECT exhibitor_name FROM bookings WHERE id = ?', [bookingId]);
-      const description = `Amount written off for ${booking.exhibitor_name}. Reason: ${reason}`;
-      await run(`INSERT INTO accounting_transactions (transaction_type, category, description, amount, transaction_date, user_id, event_session_id) VALUES ('expenditure', 'Bad Debt / Write-Off', ?, ?, date('now'), ?, ?)`, [description, writeOffAmount, user.id, activeSessionId]);
       db.run('COMMIT');
       req.session.flash = { type: 'success', message: `Successfully wrote off ₹${writeOffAmount.toFixed(2)}.` };
     } catch (err) {
@@ -495,18 +782,7 @@ router.post('/write-off/:id', async (req, res) => {
 // GET: Rent Receipt view
 router.get('/receipt/:id', async (req, res) => {
   const bookingId = req.params.id;
-  const sql = `
-    SELECT 
-      b.*, 
-      c.name AS client_name, 
-      c.full_address AS client_address,
-      s.name AS space_name, 
-      s.size AS space_size
-    FROM bookings b
-    JOIN clients c ON b.client_id = c.id
-    JOIN spaces s ON b.space_id = s.id 
-    WHERE b.id = ?
-  `;
+  const sql = `SELECT b.*, c.name AS client_name, c.full_address AS client_address, GROUP_CONCAT(s.name, ', ') AS space_name, GROUP_CONCAT(s.size, ', ') AS space_size FROM bookings b JOIN clients c ON b.client_id = c.id LEFT JOIN booking_spaces bs ON b.id = bs.booking_id LEFT JOIN spaces s ON bs.space_id = s.id WHERE b.id = ? GROUP BY b.id`;
   try {
     const booking = await get(sql, [bookingId]);
     if (!booking) {
@@ -525,13 +801,7 @@ router.get('/receipt/:id', async (req, res) => {
 // GET: Invoice view
 router.get('/invoice/:id', async (req, res) => {
   const bookingId = req.params.id;
-  const sql = `
-    SELECT b.*, c.name AS client_name, c.contact_number AS contact, s.name AS space_name, s.facilities
-    FROM bookings b
-    JOIN clients c ON b.client_id = c.id
-    JOIN spaces s ON b.space_id = s.id
-    WHERE b.id = ?
-  `;
+  const sql = `SELECT b.*, c.name AS client_name, c.contact_number AS contact, GROUP_CONCAT(s.name, ', ') AS space_name, GROUP_CONCAT(s.facilities, '; ') as facilities FROM bookings b JOIN clients c ON b.client_id = c.id LEFT JOIN booking_spaces bs ON b.id = bs.booking_id LEFT JOIN spaces s ON bs.space_id = s.id WHERE b.id = ? GROUP BY b.id`;
   try {
     const booking = await get(sql, [bookingId]);
     if (err || !booking) return res.send('Invoice not found');
@@ -595,10 +865,6 @@ router.get('/delete/:id', async (req, res) => {
   }
 
   try {
-    // Find the space_id before deleting the booking
-    const booking = await get('SELECT space_id FROM bookings WHERE id = ?', [bookingId]);
-    if (!booking) return res.status(404).send('Booking not found');
-
     // Use a transaction to ensure both operations succeed or fail together
     db.serialize(async () => {
       db.run('BEGIN TRANSACTION');
@@ -622,7 +888,7 @@ router.get('/report/cancelled', async (req, res) => {
       SELECT
         b.id,
         b.exhibitor_name,
-        s.name AS space_name,
+        GROUP_CONCAT(s.name, ', ') as space_name,
         b.vacated_date,
         b.rent_amount AS rent_charged,
         b.discount,
@@ -631,7 +897,7 @@ router.get('/report/cancelled', async (req, res) => {
         COALESCE(p.total_material_paid, 0) AS material_paid,
         COALESCE(p.total_shed_paid, 0) AS shed_paid
       FROM bookings b
-      JOIN spaces s ON b.space_id = s.id
+      LEFT JOIN booking_spaces bs ON b.id = bs.booking_id LEFT JOIN spaces s ON bs.space_id = s.id
       LEFT JOIN (
         SELECT 
           booking_id,
@@ -643,6 +909,7 @@ router.get('/report/cancelled', async (req, res) => {
         GROUP BY booking_id
       ) p ON b.id = p.booking_id
       WHERE b.event_session_id = ? AND b.booking_status IN ('cancelled', 'vacated')
+      GROUP BY b.id
       ORDER BY b.vacated_date DESC
     `, [viewingSessionId]);
 
